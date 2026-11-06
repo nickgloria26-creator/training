@@ -293,6 +293,21 @@ h2{font-family:var(--disp);font-weight:800;font-size:30px;text-transform:upperca
 #nav{background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--line)}
 #nav button.on{color:var(--accent)}
 @media (prefers-reduced-motion:reduce){.btn.big.go::after,.set.done .chk,.lvup{animation:none}}
+
+/* v4 */
+.otherbtn{display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;color:var(--muted);padding:13px;border-style:dashed}
+.otherbtn span{color:var(--accent);font-size:18px}
+.otherg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 4px}
+.og{display:flex;flex-direction:column;gap:2px;text-align:left;padding:12px;border-radius:14px;background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--accent)}
+.og.swim{border-left-color:var(--swim)}
+.og b{font-family:var(--disp);font-size:22px;font-weight:800;font-style:italic;text-transform:uppercase}.og span{font-size:12px;color:var(--muted)}
+.bwm{position:relative;overflow:hidden}.bwm.due{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}.bwm.due .eyebrow{color:var(--accent)}
+.sp2{display:block;width:100%;height:22px;margin-top:6px}.sp2 polyline{fill:none;stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.upv{color:var(--warn)}.dnv{color:var(--swim)}
+.qbw h2{margin-bottom:10px}
+.bwin.big input{font-family:var(--disp);font-size:54px;font-weight:800;height:84px}
+.bwin.big button{font-size:30px;height:84px;width:64px}
+#toast{background:var(--card2);color:var(--text);border:1px solid color-mix(in srgb,var(--accent) 50%,var(--line));font-weight:700}
 </style>
 </head>
 <body>
@@ -666,11 +681,11 @@ function renderToday(){
   else if(doneToday.length)main=`<div class="card hero donecard"><div class="eyebrow">Today</div><h2>✓ ${esc(doneToday.map(s=>s.name).join(' + '))}</h2><p class="muted">Logged. ${doneToday[0].kind==='gym'?fmtK(sessionVolume(doneToday[0]))+' kg moved':swimDist(doneToday[0])+'m swum'}.</p><button class="btn ghost" data-act="viewsess" data-id="${doneToday[0].id}">View session</button></div>`;
   else main=`<div class="card hero restcard"><div class="eyebrow">Today</div><h2>Rest day</h2><p class="muted">Walk, eat, sleep. Or log something below if plans changed.</p></div>`;
   const missed=dates.filter(d=>d<td&&plannedFor(d)&&!sessionsOn(d).length);
-  const missedHtml=missed.length&&!S.draft?`<div class="card warncard"><div class="row between"><div><div class="eyebrow">Not logged this week</div><div>${missed.map(d=>`${DOW[dowIdx(d)]} ${esc(S.templates[plannedFor(d)].name)}`).join(' · ')}</div></div></div><div class="chips mt">${missed.map(d=>`<button class="chip" data-act="start" data-t="${plannedFor(d)}" data-d="${d}">Log ${DOW[dowIdx(d)]}</button>`).join('')}</div><p class="tiny muted mt">Did it but forgot to log? Tap to back-fill. Skipped it? Fair enough, it'll show as missed.</p></div>`:'';
+  const missedHtml=missed.length&&!S.draft?`<div class="card warncard"><div class="row between"><div><div class="eyebrow">Did these? Log them</div></div></div><div class="chips mt">${missed.map(d=>`<button class="chip" data-act="start" data-t="${plannedFor(d)}" data-d="${d}">${DOW[dowIdx(d)]} · ${esc(S.templates[plannedFor(d)].name)}</button>`).join('')}</div></div>`:'';
   const anyChips=Object.values(S.templates).map(x=>`<button class="chip ${x.kind}" data-act="start" data-t="${x.id}">${esc(x.name)}</button>`).join('')+`<button class="chip swim" data-act="quickswim">⚡ Quick swim</button>`;
   // backup nag
   const lb=S.settings.lastBackup;const bdays=lb?Math.floor((Date.now()-lb)/864e5):null;
-  const nag=(bdays==null||bdays>=7)&&S.sessions.filter(s=>!s.imported).length?`<button class="card nag" data-act="backup"><b>Back up your data</b><span>${bdays==null?'Never backed up':`Last backup ${bdays} days ago`}. One tap, saves to Files/iCloud.</span></button>`:'';
+  const nag=!(S.sync&&S.sync.owner)&&(bdays==null||bdays>=7)&&S.sessions.filter(s=>!s.imported).length?`<button class="card nag" data-act="backup"><b>Back up your data</b><span>${bdays==null?'Never backed up':`Last backup ${bdays} days ago`}. One tap, saves to Files/iCloud.</span></button>`:'';
   // weekly review: on Mon/Tue show last week's
   const lastMon=ymd(addDays(parseYmd(dates[0]),-7));
   const rev=dowIdx(td)<=1?reviewCard(lastMon,'Last week'):'';
@@ -683,13 +698,13 @@ function renderToday(){
   ${todayTop(ws)}
   ${coachCard()}
   ${nag}${main}${missedHtml}
-  <div class="card"><div class="eyebrow">Log something else</div><div class="chips">${anyChips}</div></div>
+  <button class="card otherbtn" data-act="others"><span>＋</span> Log a different session</button>
   <div class="grid2">
-   <button class="card mini" data-act="tab" data-t="body"><div class="eyebrow">Bodyweight</div><div class="big">${bw.length?fw(bw.at(-1).kg)+'<small> kg</small>':'–'}</div><div class="tiny muted">${bwToday?'Logged today ✓':'Tap to log today'}</div></button>
+   ${bwMini(bw,bwToday)}
    <button class="card mini" data-act="tab" data-t="progress" data-sub="swim"><div class="eyebrow">Swim ladder</div><div class="big">${esc(sw.name)}</div><div class="tiny muted">each ${sw.dist}m under ${fmtT(S.swim.targetPace*sw.dist/100)}</div></button>
   </div>
   ${rev}
-  ${recentList(5)}`;
+  ${recentList(3)}`;
 }
 function heroCard(t,date){
   const tp=S.templates[t];
@@ -697,7 +712,7 @@ function heroCard(t,date){
   if(tp.kind==='gym'){
     body=`<div class="exlist">${tp.items.map((it,i)=>{const ex=S.exercises[it.ex];const sg=suggest(it.ex,it.sets,date);
       return`<div class="exrow ${i>=4?'opt':''}"><span class="n">${esc(ex.name)}</span><span class="w ${sg.status}">${sg.status==='up'?`<s>${fw(sg.from)}</s> `:''}${fw(sg.w)}${ex.assist?'<small> asst</small>':''}</span><span class="r">${it.sets}×${ex.repMin}-${ex.repMax}</span></div>`}).join('')}</div>
-      <p class="tiny muted">Short on time? First 4 exercises, then go home. Still counts.</p>`;
+`;
     const ups=tp.items.map(it=>({it,sg:suggest(it.ex,it.sets,date)})).filter(x=>x.sg.status==='up');
     body=missions(tp,date)+body;
   }else{
@@ -1205,7 +1220,7 @@ function streaks(){
 }
 function todayTop(ws){
   const st=streaks();
-  const flame=st.lift.cur?`<span class="pill hot">🔥 ${st.lift.cur}-week lifting streak</span>`:(st.lift.best?`<span class="pill">Best lifting streak: ${st.lift.best} weeks. Start a new one this week</span>`:'');
+  const flame=st.lift.cur?`<span class="pill hot">🔥 ${st.lift.cur}-week lifting streak</span>`:'';
   const sflame=st.swim.cur?`<span class="pill swimpill">🌊 ${st.swim.cur}-week swim streak</span>`:'';
   return`<div class="card rings"><div class="ringrow">${ring(ws.gym,S.settings.goalGym,'var(--accent)','lifts')}${ring(ws.swim,S.settings.goalSwim,'var(--swim)','swims')}
    <div class="ringstat"><b>${fmtK(ws.vol)}</b><span>kg lifted</span><b>${ws.dist}</b><span>m swum</span></div></div>
@@ -1387,13 +1402,14 @@ function hypeLine(ws){
   const gymLeft=left.filter(d=>tplKind(plannedFor(d))==='gym').length,swimLeft=left.filter(d=>tplKind(plannedFor(d))==='swim').length;
   const needG=Math.max(0,S.settings.goalGym-ws.gym),needS=Math.max(0,S.settings.goalSwim-ws.swim);
   let msg='',cls='';
-  const canG=Math.min(needG,gymLeft),canS=Math.min(needS,swimLeft);
-  if(sessionsOn(td).length){msg=needG+needS?`${needG?needG+' lift'+(needG>1?'s':''):''}${needG&&needS?' and ':''}${needS?needS+' swim'+(needS>1?'s':''):''} left to close the week.`:'Week closed. Everything from here is bonus XP.';cls='ok'}
-  else if(!needG&&!needS){msg='Week target hit. Bonus sessions still earn XP.';cls='ok'}
-  else if(needG>gymLeft&&st.lift.cur>=1){msg=`Only ${gymLeft} lift day${gymLeft===1?'':'s'} left but you need ${needG} to keep the ${st.lift.cur}-week streak. Double up or it dies.`;cls='risk'}
-  else if(needG>gymLeft){msg=`${S.settings.goalGym} lifts isn't happening this week. Smash the ${gymLeft||'next'} that ${gymLeft===1?'is':'are'} left${swimLeft?' and get the swim'+(swimLeft>1?'s':'')+' in':''}, then start the streak clean Monday.`;cls='hot'}
-  else if(st.lift.cur>=1&&needG===1){msg=`One more lift locks in a ${st.lift.cur+1}-week streak.`;cls='hot'}
-  else{msg=`${needG} lift${needG===1?'':'s'} + ${needS} swim${needS===1?'':'s'} to go this week. ${canG+canS===needG+needS?'All in the plan. Just show up.':'Tight, but doable.'}`}
+  const canG=Math.min(needG,gymLeft),canS=Math.min(needS,swimLeft);const pl=(n,w)=>`${n} ${w}${n===1?'':'s'}`;
+  const togo=[needG?pl(needG,'lift'):'',needS?pl(needS,'swim'):''].filter(Boolean).join(' + ');
+  if(!needG&&!needS){msg='Week smashed. Everything else is bonus XP.';cls='ok'}
+  else if(sessionsOn(td).length){msg=`Done today. ${togo} left this week.`;cls='ok'}
+  else if(needG>gymLeft&&st.lift.cur>=1){msg=`${pl(needG,'lift')} needed, ${gymLeft} day${gymLeft===1?'':'s'} left. Double up or the ${st.lift.cur}-week streak dies.`;cls='risk'}
+  else if(needG>gymLeft){msg=`Win the ${pl(gymLeft+swimLeft,'session')} left. Fresh streak Monday.`;cls='hot'}
+  else if(st.lift.cur>=1&&needG===1){msg=`1 more lift = ${st.lift.cur+1}-week streak 🔥`;cls='hot'}
+  else{msg=`${togo} to go. ${canG+canS===needG+needS?'All in the plan.':'Tight. Find a slot.'}`}
   return`<div class="hype ${cls}">${msg}</div>`;
 }
 
@@ -1456,6 +1472,24 @@ function confetti(n=120){
     for(const p of P){p.vy+=.38;p.vx*=.99;p.x+=p.vx;p.y+=p.vy;p.r+=p.vr;g.save();g.translate(p.x,p.y);g.rotate(p.r);g.globalAlpha=Math.max(0,1-k/2.6);g.fillStyle=p.c;g.fillRect(-p.w/2,-p.h/2,p.w,p.h*Math.abs(Math.cos(p.r*2)));g.restore()}
     if(k<2.6)requestAnimationFrame(f);else c.remove()})(t0);
 }
+
+// ---- v4: quick weigh-in, other-session sheet ----
+function bwAvg(bw,endDate,days=7){const v=bw.filter(b=>{const d=daysBetween(b.date,endDate);return d>=0&&d<days});return v.length?sum(v.map(b=>b.kg))/v.length:null}
+function bwMini(bw,bwToday){
+  const td=todayStr();const a=bwAvg(bw,td),p=bwAvg(bw,ymd(addDays(parseYmd(td),-7)));const d=a!=null&&p!=null?a-p:null;
+  const pts=bw.slice(-14).map(b=>b.kg);
+  return`<button class="card mini bwm ${bwToday?'':'due'}" data-act="bwquick"><div class="eyebrow">${bwToday?'Weight ✓':'Weigh in'}</div><div class="big">${a!=null?a.toFixed(1)+'<small> kg</small>':'–'}</div><div class="tiny muted">${a==null?'Tap after you wake':d!=null?`7-day avg · <b class="${d>0?'upv':'dnv'}">${d>0?'▲':'▼'} ${Math.abs(d).toFixed(1)}</b>`:'7-day avg'}</div>${pts.length>1?spark2(pts):''}</button>`;
+}
+function spark2(pts){const mn=Math.min(...pts),mx=Math.max(...pts),r=mx-mn||1;const W=100,H=22;const xy=pts.map((v,i)=>`${(i/(pts.length-1)*W).toFixed(1)},${(H-2-(v-mn)/r*(H-4)).toFixed(1)}`).join(' ');return`<svg class="sp2" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline points="${xy}"/></svg>`}
+Object.assign(ACT,{
+  bwquick:()=>{const bw=S.bodyweight.slice().sort((a,b)=>a.date.localeCompare(b.date));const td=todayStr();const t=bw.find(b=>b.date===td);const last=bw.at(-1);
+    openSheet(`<div class="qbw"><div class="eyebrow">${t?'Update today':'Morning weigh-in'}</div><h2>${new Date().toLocaleDateString('en-GB',{weekday:'long'})}</h2>
+     <div class="bwin big"><button data-act="bwadj" data-v="-0.1">−</button><input id="bwval" inputmode="decimal" value="${t?t.kg:(last?last.kg:'')}" placeholder="kg"><button data-act="bwadj" data-v="0.1">+</button></div>
+     <p class="tiny muted center">After the loo, before food or water. Same scale.</p>
+     <button class="btn primary big full go" data-act="bwsavequick">Save <span class="xpchip">+5 XP</span></button></div>`)},
+  bwsavequick:()=>{const x=parseFloat(String($('#bwval').value).replace(',','.'));if(!(x>25&&x<300)){ACT.bwsave();return}ACT.bwsave();closeSheet();render();confetti(40)},
+  others:()=>{openSheet(`<div class="eyebrow">Log a different session</div><div class="otherg">${Object.values(S.templates).map(x=>`<button class="og ${x.kind}" data-act="start" data-t="${x.id}"><b>${esc(x.short||x.name)}</b><span>${esc(x.name)}</span></button>`).join('')}<button class="og swim" data-act="quickswim"><b>⚡ Quick</b><span>Just distance + time</span></button></div>`)},
+});
 
 // ---------- boot ----------
 load();
