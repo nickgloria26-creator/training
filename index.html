@@ -308,6 +308,32 @@ h2{font-family:var(--disp);font-weight:800;font-size:30px;text-transform:upperca
 .bwin.big input{font-family:var(--disp);font-size:54px;font-weight:800;height:84px}
 .bwin.big button{font-size:30px;height:84px;width:64px}
 #toast{background:var(--card2);color:var(--text);border:1px solid color-mix(in srgb,var(--accent) 50%,var(--line));font-weight:700}
+
+/* sauna */
+.saunacard{border-color:color-mix(in srgb,#ff6a2b 45%,var(--line));background:radial-gradient(120% 90% at 100% 0%,rgba(255,90,40,.22),transparent 60%),var(--card)}
+.sz-big{font-size:40px;filter:drop-shadow(0 0 10px rgba(255,120,40,.6))}
+.szopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:8px;margin:12px 0 0}
+.szo{padding:12px 0;border-radius:14px;background:var(--card2);border:1px solid var(--line);font-family:var(--disp);font-size:30px;font-weight:800;font-style:italic;display:flex;flex-direction:column;align-items:center;line-height:1}
+.szo small{font-family:-apple-system,system-ui,sans-serif;font-style:normal;font-size:11px;color:var(--muted);font-weight:700;margin-top:3px}
+.szo.on{border-color:#ff8a2b;background:rgba(255,106,43,.16);color:#ffb020}
+.szopts.r{margin-top:8px}.szr{padding:9px 0;border-radius:12px;background:var(--card2);font-weight:700;font-size:13.5px;border:1px solid var(--line)}.szr.on{border-color:#ff8a2b;color:#ffb020}
+.btn.big.go.heat{background:linear-gradient(100deg,#ff3d2e,#ff8a2b 60%,#ffb020);color:#1a0600;box-shadow:0 8px 30px -8px rgba(255,90,40,.7)}
+.link.full{display:block;width:100%;margin-top:8px;color:var(--muted)}
+.sauna-done{display:flex;align-items:center;gap:12px}.sauna-done .grow{display:flex;flex-direction:column}.sz-ico{font-size:28px}
+.sauna-resume{border-color:#ff8a2b;background:radial-gradient(120% 90% at 100% 0%,rgba(255,90,40,.25),transparent 60%),var(--card)}
+.sauna{min-height:80vh;display:flex;flex-direction:column}
+body:has(.sauna.heat){background:radial-gradient(90% 60% at 50% 30%,rgba(255,70,30,.22),transparent 70%),var(--bg)}
+body:has(.sauna.cool){background:radial-gradient(90% 60% at 50% 30%,rgba(53,214,244,.18),transparent 70%),var(--bg)}
+.szring{position:relative;width:min(78vw,300px);aspect-ratio:1;margin:18px auto 8px}
+.szring svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 0 12px rgba(255,90,40,.55))}
+.szbg{fill:none;stroke:var(--card2);stroke-width:14}
+.szfg{fill:none;stroke:url(#hg);stroke-width:14;stroke-linecap:round;transition:stroke-dasharray 1s linear}
+.sauna.cool .szfg{stroke:var(--swim)}.sauna.cool .szring svg{filter:drop-shadow(0 0 12px rgba(53,214,244,.5))}
+.szmid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.szphase{font-family:var(--disp);font-weight:800;font-style:italic;text-transform:uppercase;font-size:22px;color:#ffb020;letter-spacing:.06em}
+.sauna.cool .szphase{color:var(--swim)}
+.sztime{font-family:var(--disp);font-weight:800;font-style:italic;font-size:76px;line-height:1;font-variant-numeric:tabular-nums}
+.sztip{text-align:center;color:var(--muted);font-weight:600;margin:8px 20px 16px;min-height:40px}
 </style>
 </head>
 <body>
@@ -657,14 +683,15 @@ function render(){
   else if(view.tab==='more')html=renderMore();
   else if(view.tab==='exercise')html=renderExercise();
   else if(view.tab==='sessionView')html=renderSessionView();
+  else if(view.tab==='sauna'&&typeof renderSauna==='function')html=renderSauna();
   else{view.tab='today';html=renderToday()}
   app.innerHTML=html;
-  const inSess=view.tab==='session';
+  const inSess=view.tab==='session'||view.tab==='sauna';
   $('#nav').style.display=inSess?'none':'';
   $('#nav').innerHTML=['today','progress','plan','body','more'].map(t=>`<button data-act="tab" data-t="${t}" class="${(view.tab===t||(t==='progress'&&view.tab==='exercise'))?'on':''}">${icon[t]}<span>${{today:'Today',progress:'Progress',plan:'Plan',body:'Body',more:'Data'}[t]}</span></button>`).join('');
   if(view.keepScroll)window.scrollTo(0,y);view.keepScroll=false;
   if(view.scrollTo!=null){const el=$('#ex'+view.scrollTo);view.scrollTo=null;if(el)setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),80)}
-  if(typeof wake==='function')wake(view.tab==='session');
+  if(typeof wake==='function')wake(inSess);if(typeof saunaTick==='function')saunaTick();
   tickElapsed();
 }
 
@@ -695,7 +722,7 @@ function renderToday(){
    <button class="iconbtn" data-act="calweek" aria-label="Add week to calendar">${icon.cal}</button></header>
   ${levelBar()}${hypeLine(ws)}
   <div class="strip">${strip}</div>
-  ${todayTop(ws)}
+  ${typeof saunaResume==='function'?saunaResume():''}${todayTop(ws)}
   ${coachCard()}
   ${nag}${main}${missedHtml}
   <button class="card otherbtn" data-act="others"><span>＋</span> Log a different session</button>
@@ -1223,7 +1250,7 @@ function todayTop(ws){
   const flame=st.lift.cur?`<span class="pill hot">🔥 ${st.lift.cur}-week lifting streak</span>`:'';
   const sflame=st.swim.cur?`<span class="pill swimpill">🌊 ${st.swim.cur}-week swim streak</span>`:'';
   return`<div class="card rings"><div class="ringrow">${ring(ws.gym,S.settings.goalGym,'var(--accent)','lifts')}${ring(ws.swim,S.settings.goalSwim,'var(--swim)','swims')}
-   <div class="ringstat"><b>${fmtK(ws.vol)}</b><span>kg lifted</span><b>${ws.dist}</b><span>m swum</span></div></div>
+   <div class="ringstat"><b>${fmtK(ws.vol)}</b><span>kg lifted</span><b>${ws.dist}</b><span>m swum</span>${weekSauna(ws.mon)?`<b>${weekSauna(ws.mon)}</b><span>min sauna</span>`:''}</div></div>
    ${flame||sflame?`<div class="chips">${flame}${sflame}</div>`:''}</div>`;
 }
 
@@ -1290,7 +1317,7 @@ function syncPayload(){
 function weekSummaryMd(){
   const mon=ymd(mondayOf(new Date()));const r=weekReview(mon);const lw=weekReview(ymd(addDays(parseYmd(mon),-7)));
   const fmtR=(t,x)=>`## ${t} (${fmtShort(x.w.mon)})\n- Lifts ${x.w.gym}/${x.w.planGym}, swims ${x.w.swim}/${x.w.planSwim}, ${Math.round(x.w.vol)} kg volume, ${x.w.dist} m swum\n${x.ups.length?'- Moving up: '+x.ups.join('; ')+'\n':''}${x.stalls.length?'- Stuck: '+x.stalls.join('; ')+'\n':''}${x.prs.length?'- PRs: '+x.prs.map(p=>p.ex+' '+p.txt).join('; ')+'\n':''}`;
-  const sess=sessionsSorted().slice(0,8).map(s=>`- ${s.date} ${s.name}: `+(s.kind==='gym'?s.entries.map(e=>`${(S.exercises[e.ex]||{}).name} ${fw(e.sets[0]&&e.sets[0].w)}×${e.sets.map(x=>x.r).join('/')}`).join(', '):(s.pieces||[]).map(p=>`${p.label} ${p.reps>1?p.reps+'×':''}${p.dist}m${p.times&&p.times.some(t=>t>0)?' ['+p.times.filter(t=>t>0).map(fmtT).join(' ')+']':''}`).join(', '))+(s.notes?` (note: ${s.notes})`:'')).join('\n');
+  const sess=sessionsSorted().slice(0,8).map(s=>`- ${s.date} ${s.name}: `+(s.kind==='gym'?s.entries.map(e=>`${(S.exercises[e.ex]||{}).name} ${fw(e.sets[0]&&e.sets[0].w)}×${e.sets.map(x=>x.r).join('/')}`).join(', '):(s.pieces||[]).map(p=>`${p.label} ${p.reps>1?p.reps+'×':''}${p.dist}m${p.times&&p.times.some(t=>t>0)?' ['+p.times.filter(t=>t>0).map(fmtT).join(' ')+']':''}`).join(', '))+(s.sauna?` + sauna ${s.sauna.min}min`:'')+(s.notes?` (note: ${s.notes})`:'')).join('\n');
   const bw=S.bodyweight.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-10).map(b=>`${b.date} ${b.kg}`).join(', ');
   return`# Training summary, synced ${new Date().toLocaleString('en-GB')}\n\n${fmtR('This week',r)}\n${fmtR('Last week',lw)}\n## Last 8 sessions\n${sess}\n\n## Bodyweight\n${bw||'none yet'}\n\nSwim ladder: ${S.swim.steps[S.swim.idx].name}, target ${fmtT(S.swim.targetPace)}/100m\n`;
 }
@@ -1490,6 +1517,84 @@ Object.assign(ACT,{
   bwsavequick:()=>{const x=parseFloat(String($('#bwval').value).replace(',','.'));if(!(x>25&&x<300)){ACT.bwsave();return}ACT.bwsave();closeSheet();render();confetti(40)},
   others:()=>{openSheet(`<div class="eyebrow">Log a different session</div><div class="otherg">${Object.values(S.templates).map(x=>`<button class="og ${x.kind}" data-act="start" data-t="${x.id}"><b>${esc(x.short||x.name)}</b><span>${esc(x.name)}</span></button>`).join('')}<button class="og swim" data-act="quickswim"><b>⚡ Quick</b><span>Just distance + time</span></button></div>`)},
 });
+
+// ================= sauna: post-workout heat timer =================
+const SAUNA_COOL=3; // minutes out between rounds
+function saunaMin(s){return s&&s.sauna?+s.sauna.min||0:0}
+function weekSauna(mon){const ds=weekDates(mon);return S.sessions.filter(s=>ds.includes(s.date)).reduce((a,s)=>a+saunaMin(s),0)}
+function saunaCount(){return S.sessions.filter(s=>saunaMin(s)>0).length}
+
+function saunaCard(s){
+  if(!s)return'';
+  if(saunaMin(s))return`<div class="card sauna-done"><span class="sz-ico">♨</span><div class="grow"><b>Sauna ${saunaMin(s)} min</b><span class="tiny muted">${s.sauna.rounds>1?s.sauna.rounds+' rounds · ':''}+${saunaMin(s)*2} XP</span></div><button class="link" data-act="saunaedit" data-id="${s.id}">Edit</button></div>`;
+  const last=S.sessions.filter(x=>saunaMin(x)).sort((a,b)=>b.date.localeCompare(a.date))[0];const def=last?last.sauna.per||15:15;
+  return`<div class="card saunacard"><div class="row between"><div><div class="eyebrow">Finish with heat?</div><h2>Sauna</h2></div><span class="sz-big">♨</span></div>
+   <div class="szopts">${[10,15,20].map(m=>`<button class="szo ${m===(view.szMin||def)?'on':''}" data-act="saunapick" data-m="${m}">${m}<small>min</small></button>`).join('')}</div>
+   <div class="szopts r">${[1,2,3].map(r=>`<button class="szr ${r===(view.szRounds||1)?'on':''}" data-act="saunarounds" data-r="${r}">${r} round${r>1?'s':''}</button>`).join('')}</div>
+   <button class="btn big full go heat" data-act="saunago" data-id="${s.id}">Start sauna <span class="xpchip">+${(view.szMin||def)*(view.szRounds||1)*2} XP</span></button>
+   <button class="link full center" data-act="saunalog" data-id="${s.id}">Already did it? Log minutes</button></div>`;
+}
+
+function saunaState(){const r=S.saunaRun;if(!r)return null;
+  const el=(Date.now()-r.start)/1000;const heat=r.per*60,cool=SAUNA_COOL*60,cyc=heat+cool;
+  const k=Math.floor(el/cyc),inCyc=el-k*cyc;
+  if(k>=r.rounds||(k===r.rounds-1&&inCyc>=heat))return{done:true,round:r.rounds,phase:'done',left:0,frac:1};
+  const phase=inCyc<heat?'heat':'cool';const left=phase==='heat'?heat-inCyc:cyc-inCyc;
+  return{done:false,round:k+1,phase,left,frac:phase==='heat'?inCyc/heat:(inCyc-heat)/cool};
+}
+function renderSauna(){
+  const r=S.saunaRun;if(!r){view={tab:'today'};return renderToday()}
+  const st=saunaState();const R=118,C=2*Math.PI*R;
+  const tip=st.phase==='cool'?'Step out. Cool shower, sip water.':st.done?'Done. Drink half a litre now.':['Breathe slow. Sit low if it\'s too hot.','Feeling dizzy? Get out. No medals for that.','Top bench = hottest. Move down if needed.'][Math.floor((Date.now()-r.start)/60000)%3];
+  return`<div class="sauna ${st.phase}">
+   <header class="top"><button class="iconbtn" data-act="saunaleave" aria-label="Back">‹</button><div class="grow"><div class="eyebrow">Sauna${r.rounds>1?` · round ${st.round} of ${r.rounds}`:''}</div></div><button class="btn sm ghost" data-act="saunastop">${st.done?'':'End early'}</button></header>
+   <div class="szring"><svg viewBox="0 0 260 260"><defs><linearGradient id="hg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff3d2e"/><stop offset="1" stop-color="#ffb020"/></linearGradient></defs><circle cx="130" cy="130" r="${R}" class="szbg"/><circle id="sz-arc" cx="130" cy="130" r="${R}" class="szfg" stroke-dasharray="${(C*(1-st.frac)).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 130 130)"/></svg>
+    <div class="szmid"><div class="szphase">${st.done?'Done':st.phase==='heat'?'Heat':'Cool down'}</div><div class="sztime" id="sz-time">${st.done?'♨':fmtT(Math.ceil(st.left))}</div><div class="tiny muted">${r.per} min${r.rounds>1?` × ${r.rounds}`:''}</div></div></div>
+   <p class="sztip" id="sz-tip">${tip}</p>
+   ${st.done?`<button class="btn primary big full go" data-act="saunafinish">Log ${r.per*r.rounds} min <span class="xpchip">+${r.per*r.rounds*2} XP</span></button>`:''}
+  </div>`;
+}
+let szTimer=null,szLast=null;
+function saunaTick(){
+  clearInterval(szTimer);szTimer=null;if(view.tab!=='sauna'||!S.saunaRun)return;
+  szTimer=setInterval(()=>{
+    if(view.tab!=='sauna'||!S.saunaRun){clearInterval(szTimer);szTimer=null;return}
+    const st=saunaState();const key=st.phase+st.round;
+    if(szLast&&szLast!==key){beep();setTimeout(beep,350);try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){};szLast=key;render();return}
+    szLast=key;const t=$('#sz-time');if(t&&!st.done)t.textContent=fmtT(Math.ceil(st.left));
+    const a=$('#sz-arc');if(a){const C=2*Math.PI*118;a.setAttribute('stroke-dasharray',`${(C*(1-st.frac)).toFixed(1)} ${C.toFixed(1)}`)}
+  },1000);
+}
+function saunaSave(id,min,rounds,per){_xp=null;const s=S.sessions.find(x=>x.id===id);if(!s)return;if(min>0)s.sauna={min:Math.round(min),rounds:rounds||1,per:per||Math.round(min)};else delete s.sauna;s.endedAt=s.endedAt||Date.now();save()}
+
+Object.assign(ACT,{
+  saunapick:(a)=>{view.szMin=+a.dataset.m;view.keepScroll=true;render()},
+  saunarounds:(a)=>{view.szRounds=+a.dataset.r;view.keepScroll=true;render()},
+  saunago:(a)=>{const last=S.sessions.filter(x=>saunaMin(x)).sort((p,q)=>q.date.localeCompare(p.date))[0];
+    try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)()}catch(e){}
+    S.saunaRun={sid:a.dataset.id,start:Date.now(),per:view.szMin||(last?last.sauna.per||15:15),rounds:view.szRounds||1};saveLocal();szLast=null;view={tab:'sauna'};render();window.scrollTo(0,0)},
+  saunaleave:()=>{view={tab:'today'};render();toast('Sauna timer keeps running')},
+  saunaresume:()=>{view={tab:'sauna'};render()},
+  saunastop:async()=>{const r=S.saunaRun;if(!r)return;const st=saunaState();if(st.done)return ACT.saunafinish();
+    const el=(Date.now()-r.start)/60000;let heatMin=0;for(let k=0;k<r.rounds;k++)heatMin+=Math.min(r.per,Math.max(0,el-k*(r.per+SAUNA_COOL)));const m=Math.round(heatMin);
+    if(!await ask(m?`End now and log ${m} min?`:'Cancel the sauna?',m?'Log it':'Cancel'))return;
+    if(m)saunaSave(r.sid,m,st.round,r.per);S.saunaRun=null;save();view={tab:'summary',sid:r.sid,prs:[]};render();if(m)toast(`Sauna ${m} min logged`)},
+  saunafinish:()=>{const r=S.saunaRun;if(!r)return;saunaSave(r.sid,r.per*r.rounds,r.rounds,r.per);S.saunaRun=null;save();view={tab:'summary',sid:r.sid,prs:[]};render();window.scrollTo(0,0);confetti(80);toast(`♨ Sauna ${r.per*r.rounds} min logged`)},
+  saunalog:(a)=>{const id=a.dataset.id;openSheet(`<div class="eyebrow">Log sauna</div><h2>How long?</h2><div class="szopts">${[10,15,20,30].map(m=>`<button class="szo" data-act="saunaquick" data-id="${id}" data-m="${m}">${m}<small>min</small></button>`).join('')}</div>`)},
+  saunaedit:(a)=>{const id=a.dataset.id;const s=S.sessions.find(x=>x.id===id);openSheet(`<div class="eyebrow">Edit sauna</div><h2>${saunaMin(s)} min</h2><div class="szopts">${[10,15,20,30].map(m=>`<button class="szo ${m===saunaMin(s)?'on':''}" data-act="saunaquick" data-id="${id}" data-m="${m}">${m}<small>min</small></button>`).join('')}</div><button class="btn danger full mt" data-act="saunaquick" data-id="${id}" data-m="0">Remove sauna</button>`)},
+  saunaquick:(a)=>{saunaSave(a.dataset.id,+a.dataset.m,1,+a.dataset.m);closeSheet();render();if(+a.dataset.m)toast(`♨ ${a.dataset.m} min logged`)},
+});
+
+// hook into existing screens
+const _rs2=renderSummary;
+renderSummary=function(){const s=S.sessions.find(x=>x.id===view.sid);const h=_rs2();
+  return h.replace('<button class="btn primary big full" data-act="tab" data-t="today">Done</button>',`${saunaCard(s)}<button class="btn primary big full" data-act="tab" data-t="today">Done</button>`)};
+const _rsv=renderSessionView;
+renderSessionView=function(){const s=S.sessions.find(x=>x.id===view.sid);const h=_rsv();if(!s)return h;
+  return h.replace('<div class="row gap"><button class="btn ghost grow" data-act="editsess"',`${saunaCard(s)}<div class="row gap"><button class="btn ghost grow" data-act="editsess"`)};
+const _sxp=sessionXP;sessionXP=s=>_sxp(s)+saunaMin(s)*2;
+function saunaResume(){if(!S.saunaRun)return'';const st=saunaState();return`<button class="card hero sauna-resume" data-act="saunaresume"><div class="eyebrow">Sauna running</div><h2>${st.done?'Done, log it':fmtT(Math.ceil(st.left))+(st.phase==='cool'?' cool':' left')}</h2></button>`}
+const _ach=achievements;achievements=function(){const n=saunaCount();return _ach().concat([['♨️','Heat seeker','10 sauna sessions',n>=10]])};
 
 // ---------- boot ----------
 load();
