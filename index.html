@@ -356,6 +356,14 @@ body:has(.sauna.cool){background:radial-gradient(90% 60% at 50% 30%,rgba(53,214,
 #rest.go{background:var(--accent);color:var(--accent-ink);animation:gopulse 1s ease-in-out infinite}
 #rest.go .rmain span,#rest.go .rnext{color:var(--accent-ink)}#rest.go .radj{background:rgba(0,0,0,.12)}
 @keyframes gopulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 35%,transparent)}}
+
+.wset .wval{grid-column:2/5;display:flex;align-items:baseline;gap:8px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--warn) 10%,var(--card2));border:1px dashed color-mix(in srgb,var(--warn) 45%,transparent)}
+.wset .wval b{font-size:16px;font-variant-numeric:tabular-nums}.wset .wval span{font-size:11.5px;color:var(--muted);font-weight:600}
+.wset .sn{color:var(--warn)}
+.wset.done .chk,.wset .chk.on{background:var(--warn);color:#1a0e00}
+.wset.done .wval{opacity:.55}
+.wgen{display:flex;align-items:center;gap:12px;padding:12px 14px}.wgen .grow{display:flex;flex-direction:column}
+.wgen.on{opacity:.6}.wgen.on .wchk{background:var(--warn);color:#1a0e00;border-color:var(--warn)}
 </style>
 </head>
 <body>
@@ -816,7 +824,7 @@ function exCard(e,i){
    ${sg.lastStr?`<div class="tiny muted">Last: ${esc(sg.lastStr)} · ${fmtShort(sg.lastDate)}</div>`:''}
    ${ex.note?`<div class="tiny cue">${esc(ex.note)}</div>`:''}
    <div class="sethead"><span></span><span>kg</span><span>reps</span><span></span><span></span></div>
-   ${rows}
+   ${typeof warmSetRow==='function'?warmSetRow(e,i):''}${rows}
    <div class="exact"><button class="link" data-act="addset" data-i="${i}">+ Set</button>${e.sets.length>1?`<button class="link" data-act="delset" data-i="${i}">− Set</button>`:''}<button class="link" data-act="alldone" data-i="${i}">✓ All as shown</button><button class="link" data-act="exnote" data-i="${i}">${e.note?'✎ Note':'+ Note'}</button></div>
    ${e.note?`<div class="tiny muted">📝 ${esc(e.note)}</div>`:''}
   </div>`;
@@ -1630,12 +1638,12 @@ function warmRows(d){
   return rows;
 }
 function warmCard(d){
-  if(d.kind!=='gym')return'';d.warm=d.warm||{};const rows=warmRows(d);const done=rows.filter(r=>d.warm[r.k]).length;const all=done===rows.length;
-  const started=d.entries.some(e=>e.sets.some(s=>s.done));
-  if((all||started)&&!view.warmOpen)return`<button class="card warmc collapsed" data-act="warmopen"><span class="okc ${all?'':'part'}">${all?'✓':done}</span><b>Warm-up</b><span class="tiny muted grow">${all?'done':`${done}/${rows.length}`}</span><span class="tiny muted">show</span></button>`;
-  return`<div class="card warmc"><div class="row between"><div class="eyebrow">Warm-up · 45s rest between</div>${view.warmOpen?'<button class="link" data-act="warmopen">hide</button>':''}</div>
-   ${rows.map(r=>`<button class="wrow ${d.warm[r.k]?'on':''}" data-act="warmtick" data-k="${r.k}"><span class="wchk">✓</span><span class="grow"><b>${esc(r.t)}</b><span class="tiny muted">${esc(r.sub)}</span></span></button>`).join('')}
-   ${all?'':`<button class="link" data-act="warmall">Skip, already warm</button>`}</div>`;
+  if(d.kind!=='gym')return'';d.warm=d.warm||{};const g=warmRows(d)[0];const on=!!d.warm.g;
+  return`<button class="card wgen ${on?'on':''}" data-act="warmtick" data-k="g"><span class="wchk">✓</span><span class="grow"><b>${esc(g.t)}</b><span class="tiny muted">${on?'Warmed up':'Tap when done'}</span></span></button>`;
+}
+function warmSetRow(e,i){
+  const d=S.draft;if(!d||d.kind!=='gym')return'';d.warm=d.warm||{};const r=warmRows(d).find(x=>x.k==='e'+i);if(!r)return'';const on=!!d.warm[r.k];
+  return`<div class="set wset ${on?'done':''}"><span class="sn">W</span><div class="wval"><b>${esc(r.sub)}</b><span>warm-up · 45s rest</span></div><button class="chk ${on?'on':''}" data-act="warmtick" data-k="${r.k}" aria-label="warm-up done">✓</button></div>`;
 }
 // first-two-lift ramp text now lives in the warm-up card
 rampText=function(e,i){return parseWarm(e.warmup)||/hack/i.test(e.warmup||'')?'':(e.warmup?'warm-up '+e.warmup:'')};
@@ -1650,9 +1658,9 @@ Object.assign(ACT,{
   warmopen:()=>{view.warmOpen=!view.warmOpen;view.keepScroll=true;render()},
   warmtick:(a)=>{const d=S.draft;d.warm=d.warm||{};const k=a.dataset.k;d.warm[k]=!d.warm[k];save();
     if(d.warm[k]){const rows=warmRows(d);const nxt=rows.find(r=>!d.warm[r.k]);
-      if(k!=='g')startRest(45,nxt?'next warm-up: '+nxt.t:'next: '+nextLabel());
+      if(k!=='g')startRest(45,'next: '+nextLabel());
       try{navigator.vibrate&&navigator.vibrate(15)}catch(e){}
-      if(rows.every(r=>d.warm[r.k])){view.warmOpen=false;toast('Warmed up. Let\'s go 🔥')}}
+      }
     view.keepScroll=true;render()},
   warmall:()=>{const d=S.draft;d.warm={};warmRows(d).forEach(r=>d.warm[r.k]=true);view.warmOpen=false;save();render()},
 });
