@@ -1326,7 +1326,7 @@ function achievements(){
   const g=S.settings.goalGym,sg=S.settings.goalSwim;
   const bw=S.bodyweight.map(b=>b.date).sort();let bwRun=0,bwBest=0;for(let i=0;i<bw.length;i++){bwRun=i&&daysBetween(bw[i-1],bw[i])===1?bwRun+1:1;bwBest=Math.max(bwBest,bwRun)}
   const pu=exposures('pullup').flatMap(x=>x.sets.filter(s=>s.r>=6).map(s=>+s.w));const puBest=pu.length?Math.min(...pu):99;
-  const did400=sw.some(s=>(s.pieces||[]).some(p=>p.done&&p.dist===400&&p.reps===1&&p.stroke!=='Drill'&&((p.times&&p.times[0]>0)||p.total>0)));
+  const did400=sw.some(s=>(s.pieces||[]).some(p=>p.done&&!p.unverified&&p.dist===400&&p.reps===1&&p.stroke!=='Drill'&&((p.times&&p.times[0]>0)||p.total>0)));
   return[
     ['🏋️','Full lifting week',`${g} lifts in one week`,W.some(w=>w.gym>=g)],
     ['🏊','Full swim week',`${sg} swims in one week`,W.some(w=>w.swim>=sg)],
@@ -1403,6 +1403,7 @@ async function pullCoach(quiet){
     if(r.status!==200)return;const c=JSON.parse(await r.text());
     const isNew=!S.coach||S.coach.version!==c.version;S.coach=c;S.sync.lastPull=Date.now();
     if(isNew&&c.version&&S.coachApplied!==c.version){
+      if(c.addSessions){const have=new Set(S.sessions.map(s=>s.id));for(const s of c.addSessions)if(s&&s.id&&!have.has(s.id))S.sessions.push(s)}
       if(c.planDays&&c.planDays.length===7)S.plan.days=c.planDays.map((d,i)=>Object.assign({time:(S.plan.days[i]||{}).time||'18:00'},d));
       if(c.clearOverrides)for(const k of c.clearOverrides)delete S.plan.overrides[k];
       if(c.planOverrides)Object.assign(S.plan.overrides,c.planOverrides);
