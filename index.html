@@ -334,6 +334,28 @@ body:has(.sauna.cool){background:radial-gradient(90% 60% at 50% 30%,rgba(53,214,
 .sauna.cool .szphase{color:var(--swim)}
 .sztime{font-family:var(--disp);font-weight:800;font-style:italic;font-size:76px;line-height:1;font-variant-numeric:tabular-nums}
 .sztip{text-align:center;color:var(--muted);font-weight:600;margin:8px 20px 16px;min-height:40px}
+
+/* warm-up */
+.warmc{border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+.warmc.collapsed{display:flex;align-items:center;gap:10px;padding:11px 14px;opacity:.9}
+.okc.part{background:var(--card2);color:var(--warn)}
+.wrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 0;border-top:1px solid var(--line)}
+.wrow:first-of-type{border-top:0}
+.wrow .grow{display:flex;flex-direction:column}
+.wchk{width:34px;height:34px;flex:none;border-radius:11px;background:var(--card2);display:grid;place-items:center;color:transparent;font-weight:900;border:1px solid var(--line)}
+.wrow.on .wchk{background:var(--warn);color:#1a0e00;border-color:var(--warn);animation:pop .28s ease-out}
+.wrow.on b{color:var(--muted);text-decoration:line-through}
+/* rest v2 */
+#rest{padding:0 0 10px}
+.rrow2{display:flex;align-items:stretch;gap:8px;padding:10px 10px 0}
+.radj{width:64px;border-radius:14px;background:var(--card);font-weight:800;font-size:16px}
+.rmain{flex:1;display:flex;flex-direction:column;align-items:center;padding:4px 0;border-radius:14px}
+.rmain b{font-family:var(--disp);font-size:52px;font-weight:800;font-style:italic;line-height:1;font-variant-numeric:tabular-nums}
+.rmain span{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.rnext{text-align:center;font-size:13.5px;font-weight:700;padding:6px 12px 0;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rest.go{background:var(--accent);color:var(--accent-ink);animation:gopulse 1s ease-in-out infinite}
+#rest.go .rmain span,#rest.go .rnext{color:var(--accent-ink)}#rest.go .radj{background:rgba(0,0,0,.12)}
+@keyframes gopulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 35%,transparent)}}
 </style>
 </head>
 <body>
@@ -772,6 +794,7 @@ function renderGym(){
   return`<header class="sesshead"><button class="iconbtn" data-act="leave" aria-label="Back">‹</button><div class="grow"><div class="title">${esc(d.name)}</div><div class="tiny muted"><span id="elapsed"></span> · ${dn}/${tot} sets · ${etaText(d)}${d.date!==todayStr()?' · '+fmtDate(d.date):''}</div></div><button class="btn primary sm" data-act="finish">Finish</button></header><div class="sessbar"><i style="width:${tot?Math.round(dn/tot*100):0}%"></i></div>
   <div class="progressbar"><i style="width:${tot?dn/tot*100:0}%"></i></div>
   ${d.entries.length>4&&!d.entries.slice(4).some(e=>e.sets.some(s=>s.done))?`<div class="chips" style="margin:0 0 12px"><button class="chip" data-act="shortday">⏱ Short on time: keep first 4 only</button></div>`:''}
+  ${typeof warmCard==='function'?warmCard(d):''}
   ${d.entries.map((e,i)=>exCard(e,i)).join('')}
   <button class="btn ghost full" data-act="addex">+ Add exercise</button>
   <button class="btn primary big full mt" data-act="finish">Finish workout</button><div style="height:90px"></div>`;
@@ -1596,11 +1619,79 @@ const _sxp=sessionXP;sessionXP=s=>_sxp(s)+saunaMin(s)*2;
 function saunaResume(){if(!S.saunaRun)return'';const st=saunaState();return`<button class="card hero sauna-resume" data-act="saunaresume"><div class="eyebrow">Sauna running</div><h2>${st.done?'Done, log it':fmtT(Math.ceil(st.left))+(st.phase==='cool'?' cool':' left')}</h2></button>`}
 const _ach=achievements;achievements=function(){const n=saunaCount();return _ach().concat([['♨️','Heat seeker','10 sauna sessions',n>=10]])};
 
+// ================= warm-ups + simpler rest timer =================
+function parseWarm(str){const m=String(str||'').match(/(\d+)\s*[×x]\s*(\d+)\s*@\s*([\d.]+)\s*(s|assist)?/i);return m?{n:+m[1],r:+m[2],w:+m[3],unit:(m[4]||'').toLowerCase()}:null}
+function isLower(d){const t=S.templates[d.tpl];return /lower/i.test(t?t.name:d.name)}
+function warmRows(d){
+  const rows=[{k:'g',t:isLower(d)?'5 min bike + leg swings':'5 min bike + arm circles + band pull-aparts',sub:'General warm-up'}];
+  d.entries.forEach((e,i)=>{const ex=S.exercises[e.ex];if(!ex)return;const p=parseWarm(e.warmup);
+    if(p)rows.push({k:'e'+i,i,t:`${ex.name}`,sub:`${fw(p.w)}${ex.perHand||p.unit==='s'?'s':''}${ex.assist?' assist':''} × ${p.r}`});
+    else if(e.warmup&&/hack/i.test(e.warmup)&&i===0)rows.push({k:'e'+i,i,t:ex.name,sub:'Sled only × 8. Back flat on pad'});});
+  return rows;
+}
+function warmCard(d){
+  if(d.kind!=='gym')return'';d.warm=d.warm||{};const rows=warmRows(d);const done=rows.filter(r=>d.warm[r.k]).length;const all=done===rows.length;
+  const started=d.entries.some(e=>e.sets.some(s=>s.done));
+  if((all||started)&&!view.warmOpen)return`<button class="card warmc collapsed" data-act="warmopen"><span class="okc ${all?'':'part'}">${all?'✓':done}</span><b>Warm-up</b><span class="tiny muted grow">${all?'done':`${done}/${rows.length}`}</span><span class="tiny muted">show</span></button>`;
+  return`<div class="card warmc"><div class="row between"><div class="eyebrow">Warm-up · 45s rest between</div>${view.warmOpen?'<button class="link" data-act="warmopen">hide</button>':''}</div>
+   ${rows.map(r=>`<button class="wrow ${d.warm[r.k]?'on':''}" data-act="warmtick" data-k="${r.k}"><span class="wchk">✓</span><span class="grow"><b>${esc(r.t)}</b><span class="tiny muted">${esc(r.sub)}</span></span></button>`).join('')}
+   ${all?'':`<button class="link" data-act="warmall">Skip, already warm</button>`}</div>`;
+}
+// first-two-lift ramp text now lives in the warm-up card
+rampText=function(e,i){return parseWarm(e.warmup)||/hack/i.test(e.warmup||'')?'':(e.warmup?'warm-up '+e.warmup:'')};
+
+function nextLabel(){
+  const d=S.draft;if(!d||d.kind!=='gym')return'';
+  for(let i=0;i<d.entries.length;i++){const e=d.entries[i];const j=e.sets.findIndex(s=>!s.done);if(j>=0){const ex=S.exercises[e.ex];return`${ex.name} · set ${j+1} · ${fw(e.sets[j].w)} × ${e.sets[j].r}`}}
+  return'Last set done. Finish it!';
+}
+
+Object.assign(ACT,{
+  warmopen:()=>{view.warmOpen=!view.warmOpen;view.keepScroll=true;render()},
+  warmtick:(a)=>{const d=S.draft;d.warm=d.warm||{};const k=a.dataset.k;d.warm[k]=!d.warm[k];save();
+    if(d.warm[k]){const rows=warmRows(d);const nxt=rows.find(r=>!d.warm[r.k]);
+      if(k!=='g')startRest(45,nxt?'next warm-up: '+nxt.t:'next: '+nextLabel());
+      try{navigator.vibrate&&navigator.vibrate(15)}catch(e){}
+      if(rows.every(r=>d.warm[r.k])){view.warmOpen=false;toast('Warmed up. Let\'s go 🔥')}}
+    view.keepScroll=true;render()},
+  warmall:()=>{const d=S.draft;d.warm={};warmRows(d).forEach(r=>d.warm[r.k]=true);view.warmOpen=false;save();render()},
+});
+
+// ---- rest timer v2: big, one-tap, clearer ----
+const _startRest=startRest;
+startRest=function(sec,label){
+  try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)()}catch(e){}
+  _startRest(sec,label);if(S.draft){S.draft.restT=restT;saveLocal()}
+};
+function softTick(){try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=660;g.gain.setValueAtTime(.001,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.15,audioCtx.currentTime+.01);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.15);o.connect(g).connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+.16)}catch(e){}}
+tickRest=function(){
+  const el=$('#rest');if(!restT){el.classList.remove('on','go');return}
+  const left=Math.ceil((restT.end-Date.now())/1000);
+  if(left<=3&&left>0&&restT.lastTick!==left){restT.lastTick=left;softTick()}
+  if(left<=0&&!restT.beeped){restT.beeped=true;beep();setTimeout(beep,300);setTimeout(beep,600)}
+  el.classList.toggle('go',left<=0);
+  const pct=Math.max(0,Math.min(100,left/restT.total*100));
+  el.innerHTML=`<div class="rbar"><i style="width:${pct}%"></i></div>
+   <div class="rrow2"><button class="radj" data-act="rest" data-v="-30">−30</button>
+    <button class="rmain" data-act="rest" data-v="x"><b>${left>0?fmtT(left):'GO'}</b><span>${left>0?'tap to skip':'tap to close'}</span></button>
+    <button class="radj" data-act="rest" data-v="30">+30</button></div>
+   <div class="rnext">${esc(restT.label||'')}</div>`;
+  if(left<-30){restT=null;if(S.draft){S.draft.restT=null;saveLocal()}el.classList.remove('on','go')}
+};
+const _restAct=ACT.rest;
+ACT.rest=(a)=>{_restAct(a);if(S.draft){S.draft.restT=restT;saveLocal()}};
+// richer "next" label after ticking a working set
+const _tg2=ACT.toggle;
+ACT.toggle=(a)=>{_tg2(a);if(restT&&S.draft&&S.draft.kind==='gym'){restT.label='next: '+nextLabel();S.draft.restT=restT;saveLocal();tickRest()}};
+// restore a running timer after the app was closed mid-rest
+function restoreRest(){if(S.draft&&S.draft.restT&&S.draft.restT.end>Date.now()-30000){restT=S.draft.restT;$('#rest').classList.add('on');tickRest()}}
+
 // ---------- boot ----------
 load();
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 if(S.draft)view={tab:'session'};
 render();
+if(typeof restoreRest==='function')restoreRest();
 if(S.sync&&S.sync.token){pullCoach(true);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pullCoach(true);else if(!S.draft)syncNow(true)})}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wake(view.tab==='session')});
 
