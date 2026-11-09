@@ -364,6 +364,10 @@ body:has(.sauna.cool){background:radial-gradient(90% 60% at 50% 30%,rgba(53,214,
 .wset.done .wval{opacity:.55}
 .wgen{display:flex;align-items:center;gap:12px;padding:12px 14px}.wgen .grow{display:flex;flex-direction:column}
 .wgen.on{opacity:.6}.wgen.on .wchk{background:var(--warn);color:#1a0e00;border-color:var(--warn)}
+
+.restbig{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:72px;padding:4px 10px;border-radius:12px;background:color-mix(in srgb,var(--swim) 14%,var(--card2));border:1px solid color-mix(in srgb,var(--swim) 45%,transparent);font-family:var(--disp);font-size:26px;font-weight:800;font-style:italic;line-height:1;color:var(--swim);font-variant-numeric:tabular-nums}
+.restbig small{font-family:-apple-system,system-ui,sans-serif;font-style:normal;font-size:9.5px;letter-spacing:.1em;font-weight:800;color:var(--muted);margin-bottom:2px}
+.excard.collapsed .restbig{display:none}
 </style>
 </head>
 <body>
@@ -818,8 +822,8 @@ function exCard(e,i){
     <button class="chk" data-act="toggle" data-i="${i}" data-j="${j}" aria-label="done">✓</button></div>
     ${view.rir===`${i}-${j}`?`<div class="rirrow">${[0,1,2,3,4].map(v=>`<button data-act="rirset" data-i="${i}" data-j="${j}" data-v="${v}" class="${s.rir===v?'on':''}">${S.settings.effort==='RPE'?'RPE '+(10-v):v+(v===4?'+':'')}</button>`).join('')}<button data-act="rirset" data-i="${i}" data-j="${j}" data-v="">–</button></div>`:''}`).join('');
   return`<div class="card excard ${allDone?'alldone':''}" id="ex${i}">
-   <div class="row between"><button class="exname" data-act="exinfo" data-ex="${e.ex}">${esc(ex.name)}</button><button class="iconbtn sm" data-act="exmenu" data-i="${i}">⋯</button></div>
-   <div class="tiny muted">${e.sets.length}×${ex.repMin}-${ex.repMax}${ex.assist?' · assist kg':''}${ex.perHand?' · per hand':''} · rest ${fmtT(ex.rest)}${rampText(e,i)?` · ${esc(rampText(e,i))}`:''}</div>
+   <div class="row between gap"><button class="exname grow" data-act="exinfo" data-ex="${e.ex}">${esc(ex.name)}</button><span class="restbig" title="rest between sets"><small>REST</small>${fmtT(ex.rest)}</span><button class="iconbtn sm" data-act="exmenu" data-i="${i}">⋯</button></div>
+   <div class="tiny muted">${e.sets.length}×${ex.repMin}-${ex.repMax}${ex.assist?' · assist kg':''}${ex.perHand?' · per hand':''}${rampText(e,i)?` · ${esc(rampText(e,i))}`:''}</div>
    ${sg.msg?`<div class="sugg ${sg.status}">${statusBadge(sg.status)} ${esc(sg.msg)}</div>`:''}
    ${sg.lastStr?`<div class="tiny muted">Last: ${esc(sg.lastStr)} · ${fmtShort(sg.lastDate)}</div>`:''}
    ${ex.note?`<div class="tiny cue">${esc(ex.note)}</div>`:''}
