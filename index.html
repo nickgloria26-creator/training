@@ -1805,7 +1805,9 @@ const FOOD_DEF={kcal:3000,p:140};
 function F(){
   if(!S.food)S.food={};const f=S.food;
   f.targets=f.targets||{...FOOD_DEF};f.log=f.log||{};f.custom=f.custom||[];
-  if(!f.meals)f.meals=[{id:'porridge',name:'Porridge',portions:1,items:[{i:'oats',a:80},{i:'milk',a:300},{i:'banana',a:1},{i:'honey',a:15}],starter:true}];
+  const PORR=[{i:'oats',a:90},{i:'milk',a:200},{i:'berries',a:100}];
+  if(!f.meals)f.meals=[{id:'porridge',name:'Porridge',portions:1,items:PORR,starter:true},{id:'prep',name:'Meal prep box',portions:1,items:[],k:850,p:45,starter:true}];
+  const po=f.meals.find(m=>m.id==='porridge'&&m.starter&&m.items&&m.items.some(x=>x.i==='banana'));if(po){po.items=PORR;if(!f.meals.some(m=>m.id==='prep'))f.meals.push({id:'prep',name:'Meal prep box',portions:1,items:[],k:850,p:45,starter:true})}
   return f;
 }
 const fIng=id=>FOODDB.find(x=>x.id===id)||F().custom.find(x=>x.id===id);
@@ -1909,7 +1911,7 @@ function customSheet(name,back){return`<div class="eyebrow">New food (from the l
 // ---- meal editor ----
 function mealEditor(id){const f=F();const m=f.meals.find(x=>x.id===id);if(!m)return'';const x=mealMac(m);const manual=!m.items||!m.items.length;
   return`<div class="eyebrow">Saved meal</div><label class="field"><span>Name</span><input data-bind="f-mname" data-id="${m.id}" value="${esc(m.name)}"></label>
-   ${m.starter?`<p class="tiny warn-t">Starter guess. Change it to what you actually put in your porridge.</p>`:''}
+   ${m.starter?`<p class="tiny warn-t">Starter estimate. Weigh it once and fix the amounts.</p>`:''}
    <div class="eyebrow mt">Ingredients for the whole batch</div>
    ${(m.items||[]).map((it,i)=>{const g=fIng(it.i);if(!g)return'';const mm=ingMac(it);return`<div class="tplrow"><div class="grow"><b>${esc(g.n)}</b><div class="tiny muted">${Math.round(mm.k)} kcal · ${Math.round(mm.p)} g</div></div><label class="mini-in"><span>${g.u?g.u+'s':g.ml?'ml':'g'}</span><input inputmode="decimal" data-bind="f-mamt" data-id="${m.id}" data-i="${i}" value="${it.a}"></label><button class="iconbtn sm danger" data-act="fmealrm" data-id="${m.id}" data-i="${i}">✕</button></div>`}).join('')}
    <input class="search mt" data-bind="f-msearch" data-id="${m.id}" placeholder="＋ add ingredient (search)" autocomplete="off"><div id="fmres"></div>
@@ -1973,7 +1975,7 @@ document.addEventListener('change',e=>{const t=e.target;const b=t.dataset.bind;i
     case'f-mname':m.name=t.value.trim()||m.name;break;
     case'f-mamt':m.items[+t.dataset.i].a=n(t.value);delete m.starter;break;
     case'f-mport':m.portions=Math.max(1,Math.round(n(t.value))||1);break;
-    case'f-mk':m.k=n(t.value);break;
+    case'f-mk':m.k=n(t.value);delete m.starter;break;
     case'f-mp':m.p=n(t.value);break;
   }
   save();
