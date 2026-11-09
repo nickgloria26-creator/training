@@ -374,6 +374,26 @@ body:has(.sauna.cool){background:radial-gradient(90% 60% at 50% 30%,rgba(53,214,
 button.sauna-done{text-align:left}
 .og.sauna{border-left-color:#ff8a2b;grid-column:1/-1}
 .szo{font-size:24px}
+
+/* week view */
+.weekc{padding:12px 12px 6px}
+.weekc .center{flex:1}
+.weekc .iconbtn:disabled{opacity:.3}
+.wrow2{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;width:100%;text-align:left;padding:9px 4px;border-top:1px solid var(--line)}
+.wrow2:first-of-type{border-top:0}
+.wrow2.today{background:color-mix(in srgb,var(--accent) 8%,transparent);border-radius:12px;border-top-color:transparent;box-shadow:inset 3px 0 0 var(--accent)}
+.wrow2.today+.wrow2{border-top-color:transparent}
+.wrow2.past{opacity:.7}
+.wd{display:flex;flex-direction:column;align-items:center;line-height:1.05}.wd b{font-size:12px;text-transform:uppercase;color:var(--muted)}.wd small{font-family:var(--disp);font-size:20px;font-weight:800}
+.wl{display:flex;flex-wrap:wrap;gap:5px}
+.wi{font-size:13px;font-weight:700;padding:4px 9px;border-radius:999px;background:var(--card2);border:1px solid var(--line)}
+.wi.gym{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}.wi.swim{border-color:color-mix(in srgb,var(--swim) 50%,transparent);color:var(--swim)}
+.wi.gym.ok{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}.wi.swim.ok{background:var(--swim);color:#03141a;border-color:var(--swim)}
+.wi.miss{text-decoration:line-through;color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+.wi.rest{color:var(--muted);background:transparent}
+.wi.szi{border-color:#ff8a2b;color:#ffb020}
+.wt{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pst{display:flex;align-items:center;gap:6px}.xtra{font-size:11.5px;font-weight:800;color:var(--swim);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -472,7 +492,10 @@ function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){to
 function save(){saveLocal();if(typeof syncSoon==='function')syncSoon()}
 
 // ---------- plan ----------
-function plannedFor(date){const o=S.plan.overrides[date];if(o!==undefined)return o==='REST'?null:(S.templates[o]?o:null);const t=S.plan.days[dowIdx(date)].tpl;return t&&S.templates[t]?t:null}
+function plannedAll(date){const o=S.plan.overrides[date];let l;
+  if(o!==undefined)l=o==='REST'?[]:String(o).split('+');else{const d=S.plan.days[dowIdx(date)];l=[d.tpl,d.extra]}
+  return l.filter(t=>t&&S.templates[t])}
+function plannedFor(date){return plannedAll(date)[0]||null}
 function planTime(date){return S.plan.days[dowIdx(date)].time||'18:00'}
 const sessionsSorted=()=>S.sessions.slice().sort((a,b)=>b.date.localeCompare(a.date)||(b.endedAt||0)-(a.endedAt||0));
 const sessionsOn=date=>S.sessions.filter(s=>s.date===date);
@@ -545,7 +568,7 @@ function weekStats(mon){
   const dates=weekDates(mon);const ss=S.sessions.filter(s=>dates.includes(s.date));
   const muscles={};let vol=0,dist=0,swimT=0;
   for(const s of ss){if(s.kind==='gym'){vol+=sessionVolume(s);for(const e of s.entries){const ex=S.exercises[e.ex];if(!ex)continue;const n=e.sets.filter(x=>x.done).length;muscles[ex.muscle]=(muscles[ex.muscle]||0)+n}}else{dist+=swimDist(s);swimT+=swimTime(s)||0}}
-  const planned=dates.map(plannedFor);
+  const planned=dates.flatMap(plannedAll);
   return{mon:dates[0],gym:ss.filter(s=>s.kind==='gym').length,swim:ss.filter(s=>s.kind==='swim').length,
     planGym:planned.filter(t=>tplKind(t)==='gym').length,planSwim:planned.filter(t=>tplKind(t)==='swim').length,vol,dist,swimT,muscles,sessions:ss};
 }
@@ -636,7 +659,7 @@ function exportIcs(items,name){
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   toast(ios?'Tap “Add All” to put it in Calendar':'Calendar file downloaded');
 }
-function planItems(from,days){const out=[];for(let i=0;i<days;i++){const d=ymd(addDays(parseYmd(from),i));const t=plannedFor(d);if(t&&!sessionsOn(d).some(s=>s.tpl===t))out.push({date:d,tpl:t,time:planTime(d)})}return out}
+function planItems(from,days){const out=[];for(let i=0;i<days;i++){const d=ymd(addDays(parseYmd(from),i));for(const t of plannedAll(d))if(!sessionsOn(d).some(s=>s.tpl===t))out.push({date:d,tpl:t,time:planTime(d)})}return out}
 
 // ---------- backup ----------
 async function exportBackup(){
@@ -740,8 +763,8 @@ function renderToday(){
   const td=todayStr();const dates=weekDates(td);const ws=weekStats(dates[0]);
   const strip=dates.map(d=>{const t=plannedFor(d);const done=sessionsOn(d);const isT=d===td;const past=d<td;
     const st=done.length?'done':(t&&past?'miss':(isT?'today':''));const k=done[0]?.kind||tplKind(t);
-    return`<button class="day ${st} ${k||'rest'}" data-act="dayinfo" data-d="${d}"><span class="dn">${DOW[dowIdx(d)]}</span><span class="dd">${parseYmd(d).getDate()}</span><span class="dl">${done.length?'✓':t?esc(S.templates[t].short):'·'}</span></button>`}).join('');
-  const t=plannedFor(td);const doneToday=sessionsOn(td);
+    return`<button class="day ${st} ${k||'rest'}" data-act="dayinfo" data-d="${d}"><span class="dn">${DOW[dowIdx(d)]}</span><span class="dd">${parseYmd(d).getDate()}</span><span class="dl">${done.length&&done.length>=plannedAll(d).length?'✓':t?esc(S.templates[t].short)+(plannedAll(d).length>1?'+':''):'·'}</span></button>`}).join('');
+  const doneToday=sessionsOn(td);const t=plannedAll(td).find(x=>!doneToday.some(s=>s.tpl===x))||plannedFor(td);
   let main='';
   if(S.draft){main=`<div class="card hero resume"><div class="eyebrow">In progress</div><h2>${esc(S.draft.name)}</h2><p class="muted">${fmtDate(S.draft.date)} · started ${new Date(S.draft.startedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</p><button class="btn primary big" data-act="resume">Resume session</button></div>`}
   else if(t&&!doneToday.some(s=>s.tpl===t))main=heroCard(t,td);
@@ -960,7 +983,7 @@ function renderPlan(){
   const def=S.plan.days;const nG=def.filter(d=>tplKind(d.tpl)==='gym').length,nS=def.filter(d=>tplKind(d.tpl)==='swim').length;
   return`<header class="top"><div><div class="eyebrow">Plan</div><h1>Your week</h1></div></header>
   <div class="card"><div class="row between"><button class="iconbtn sm" data-act="wk" data-v="-1">‹</button><div class="eyebrow">${off===0?'This week':off===1?'Next week':off===-1?'Last week':''} · ${fmtShort(dates[0])} – ${fmtShort(dates[6])}</div><button class="iconbtn sm" data-act="wk" data-v="1">›</button></div>
-   ${dates.map(d=>{const t=plannedFor(d);const done=sessionsOn(d);const ov=S.plan.overrides[d]!==undefined&&plannedFor(d)!==(S.plan.days[dowIdx(d)].tpl||null);return`<div class="planrow ${d===td?'today':''}"><span class="pd"><b>${DOW[dowIdx(d)]}</b><small>${parseYmd(d).getDate()}</small></span><select data-bind="ovr" data-d="${d}" class="${tplKind(t)||'rest'}">${tplOptions(t)}</select>${done.length?'<span class="ok">✓</span>':ov?'<span class="tiny muted">moved</span>':'<span></span>'}</div>`}).join('')}
+   ${dates.map(d=>{const t=plannedFor(d);const done=sessionsOn(d);const ov=S.plan.overrides[d]!==undefined&&plannedFor(d)!==(S.plan.days[dowIdx(d)].tpl||null);return`<div class="planrow ${d===td?'today':''}"><span class="pd"><b>${DOW[dowIdx(d)]}</b><small>${parseYmd(d).getDate()}</small></span><select data-bind="ovr" data-d="${d}" class="${tplKind(t)||'rest'}">${tplOptions(t)}</select>${planStatus(d,done,ov)}</div>`}).join('')}
    <p class="tiny muted">Change a day here to move things around just for that week. Your default week stays the same.</p>
    <div class="row gap wrap mt"><button class="btn primary grow" data-act="calrange" data-from="${dates[0]<td&&off===0?td:dates[0]}" data-n="${dates[0]<td&&off===0?daysBetween(td,dates[6])+1:7}">${icon.cal} Add to Calendar</button><button class="btn ghost" data-act="cal4">+4 weeks</button>${Object.keys(S.plan.overrides).some(k=>dates.includes(k))?`<button class="btn ghost" data-act="resetwk" data-d="${dates[0]}">Reset week</button>`:''}</div>
   </div>
@@ -1380,6 +1403,8 @@ async function pullCoach(quiet){
     if(r.status!==200)return;const c=JSON.parse(await r.text());
     const isNew=!S.coach||S.coach.version!==c.version;S.coach=c;S.sync.lastPull=Date.now();
     if(isNew&&c.version&&S.coachApplied!==c.version){
+      if(c.planDays&&c.planDays.length===7)S.plan.days=c.planDays.map((d,i)=>Object.assign({time:(S.plan.days[i]||{}).time||'18:00'},d));
+      if(c.clearOverrides)for(const k of c.clearOverrides)delete S.plan.overrides[k];
       if(c.planOverrides)Object.assign(S.plan.overrides,c.planOverrides);
       if(c.swim){if(c.swim.idx!=null)S.swim.idx=c.swim.idx;if(c.swim.targetPace)S.swim.targetPace=c.swim.targetPace}
       if(c.exercises)for(const[id,v]of Object.entries(c.exercises))S.exercises[id]=Object.assign(S.exercises[id]||{id},v);
@@ -1459,15 +1484,15 @@ function xpPreview(tp){
 
 // ---- headline + hype ----
 function headline(){
-  const td=todayStr();const t=plannedFor(td);const done=sessionsOn(td);
-  if(done.length)return'Job done today.';
+  const td=todayStr();const done=sessionsOn(td);const t=plannedAll(td).find(x=>!done.some(s=>s.tpl===x));
+  if(done.length&&!t)return'Job done today.';
   if(t&&t!=='REST'&&S.templates[t]){const h=+planTime(td).slice(0,2);return`${S.templates[t].short==='Swim'||S.templates[t].kind==='swim'?'Pool':S.templates[t].name} ${h>=17?'tonight':'today'}.`}
   return S.settings.name?`Rest up, ${esc(S.settings.name)}.`:'Rest day.';
 }
 function hypeLine(ws){
   const td=todayStr();const st=streaks();const dates=weekDates(td);
-  const left=dates.filter(d=>d>=td&&!sessionsOn(d).length);
-  const gymLeft=left.filter(d=>tplKind(plannedFor(d))==='gym').length,swimLeft=left.filter(d=>tplKind(plannedFor(d))==='swim').length;
+  const left=dates.filter(d=>d>=td);
+  const rem=(d,k)=>plannedAll(d).filter(t=>tplKind(t)===k&&!sessionsOn(d).some(s=>s.tpl===t)).length;const gymLeft=sum(left.map(d=>rem(d,'gym'))),swimLeft=sum(left.map(d=>rem(d,'swim')));
   const needG=Math.max(0,S.settings.goalGym-ws.gym),needS=Math.max(0,S.settings.goalSwim-ws.swim);
   let msg='',cls='';
   const canG=Math.min(needG,gymLeft),canS=Math.min(needS,swimLeft);const pl=(n,w)=>`${n} ${w}${n===1?'':'s'}`;
@@ -1717,6 +1742,28 @@ const _tg2=ACT.toggle;
 ACT.toggle=(a)=>{_tg2(a);if(restT&&S.draft&&S.draft.kind==='gym'){restT.label='next: '+nextLabel();S.draft.restT=restT;saveLocal();tickRest()}};
 // restore a running timer after the app was closed mid-rest
 function restoreRest(){if(S.draft&&S.draft.restT&&S.draft.restT.end>Date.now()-30000){restT=S.draft.restT;$('#rest').classList.add('on');tickRest()}}
+
+// ================= week view: what am I doing this week =================
+function dayLine(d){const l=plannedAll(d);return l.length?l.map(t=>S.templates[t].name).join(' + '):'Rest'}
+function planStatus(d,done,ov){
+  const l=plannedAll(d);const x=l[1]?`<span class="xtra">+ ${esc(S.templates[l[1]].short)}</span>`:'';
+  return`<span class="pst">${x}${done.length?'<span class="ok">✓</span>':ov?'<span class="tiny muted">moved</span>':''}</span>`;
+}
+function weekCard(){
+  const td=todayStr();const off=view.wkc||0;const dates=weekDates(ymd(addDays(parseYmd(td),7*off)));
+  const rows=dates.map(d=>{const l=plannedAll(d);const done=sessionsOn(d);const isT=d===td;
+    const items=l.length?l.map(t=>{const ok=done.some(s=>s.tpl===t);const k=tplKind(t);return`<span class="wi ${k} ${ok?'ok':d<td?'miss':''}">${ok?'✓ ':''}${esc(S.templates[t].name)}</span>`}).join(''):`<span class="wi rest">Rest</span>`;
+    const extra=done.filter(s=>!l.includes(s.tpl)).map(s=>`<span class="wi ${s.kind} ok">✓ ${esc(s.name)}</span>`).join('');
+    const sz=done.find(s=>saunaMin(s));
+    return`<button class="wrow2 ${isT?'today':''} ${d<td?'past':''}" data-act="dayinfo" data-d="${d}"><span class="wd"><b>${DOW[dowIdx(d)]}</b><small>${parseYmd(d).getDate()}</small></span><span class="wl">${items}${extra}${sz?'<span class="wi szi">♨</span>':''}</span><span class="wt">${l.length?planTime(d):''}</span></button>`}).join('');
+  const nG=sum(dates.map(d=>plannedAll(d).filter(t=>tplKind(t)==='gym').length)),nS=sum(dates.map(d=>plannedAll(d).filter(t=>tplKind(t)==='swim').length));
+  return`<div class="card weekc"><div class="row between"><button class="iconbtn sm" data-act="wkc" data-v="-1" ${off<=0?'disabled':''}>‹</button><div class="center"><div class="eyebrow">${off===0?'This week':off===1?'Next week':'In '+off+' weeks'}</div><div class="tiny muted">${fmtShort(dates[0])} – ${fmtShort(dates[6])} · ${nG} lifts + ${nS} swims</div></div><button class="iconbtn sm" data-act="wkc" data-v="1" ${off>=3?'disabled':''}>›</button></div>${rows}</div>`;
+}
+Object.assign(ACT,{wkc:(a)=>{view.wkc=Math.max(0,Math.min(3,(view.wkc||0)+ +a.dataset.v));view.keepScroll=true;render()}});
+const _rtd2=renderToday;
+renderToday=function(){return _rtd2().replace('<button class="card otherbtn"',weekCard()+'<button class="card otherbtn"')};
+const _rp=renderPlan;
+renderPlan=function(){let h=_rp();S.plan.days.forEach((d,i)=>{if(d.extra&&S.templates[d.extra])h=h.replace(`<b>${DOW[i]}</b></span><select data-bind="defday" data-i="${i}"`,`<b>${DOW[i]}</b><small class="xtra">+${esc(S.templates[d.extra].short)}</small></span><select data-bind="defday" data-i="${i}"`)});return h};
 
 // ---------- boot ----------
 load();
