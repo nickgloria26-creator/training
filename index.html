@@ -368,6 +368,12 @@ body:has(.sauna.cool){background:radial-gradient(90% 60% at 50% 30%,rgba(53,214,
 .restbig{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:72px;padding:4px 10px;border-radius:12px;background:color-mix(in srgb,var(--swim) 14%,var(--card2));border:1px solid color-mix(in srgb,var(--swim) 45%,transparent);font-family:var(--disp);font-size:26px;font-weight:800;font-style:italic;line-height:1;color:var(--swim);font-variant-numeric:tabular-nums}
 .restbig small{font-family:-apple-system,system-ui,sans-serif;font-style:normal;font-size:9.5px;letter-spacing:.1em;font-weight:800;color:var(--muted);margin-bottom:2px}
 .excard.collapsed .restbig{display:none}
+
+.saunabtn{display:flex;align-items:center;gap:12px;padding:12px 14px;border-color:color-mix(in srgb,#ff6a2b 45%,var(--line));background:radial-gradient(100% 120% at 100% 0%,rgba(255,90,40,.18),transparent 60%),var(--card)}
+.saunabtn .grow,.sauna-done .grow{display:flex;flex-direction:column;text-align:left}.szplus{color:#ffb020;font-size:20px}
+button.sauna-done{text-align:left}
+.og.sauna{border-left-color:#ff8a2b;grid-column:1/-1}
+.szo{font-size:24px}
 </style>
 </head>
 <body>
@@ -1555,19 +1561,22 @@ Object.assign(ACT,{
 
 // ================= sauna: post-workout heat timer =================
 const SAUNA_COOL=3; // minutes out between rounds
+const SZR=[{l:'5–10',m:8},{l:'10–15',m:13},{l:'15–20',m:18},{l:'20–30',m:25}];
+function saunaLabel(s){return s&&s.sauna?(s.sauna.range||s.sauna.min)+' min':''}
+function rangeSheet(id,cur,title){return`<div class="eyebrow">${title}</div><h2>Roughly how long?</h2><div class="szopts">${SZR.map(r=>`<button class="szo ${r.l===cur?'on':''}" data-act="saunaquick" data-id="${id}" data-m="${r.m}" data-l="${r.l}">${r.l}<small>min</small></button>`).join('')}</div>`}
 function saunaMin(s){return s&&s.sauna?+s.sauna.min||0:0}
 function weekSauna(mon){const ds=weekDates(mon);return S.sessions.filter(s=>ds.includes(s.date)).reduce((a,s)=>a+saunaMin(s),0)}
 function saunaCount(){return S.sessions.filter(s=>saunaMin(s)>0).length}
 
 function saunaCard(s){
   if(!s)return'';
-  if(saunaMin(s))return`<div class="card sauna-done"><span class="sz-ico">♨</span><div class="grow"><b>Sauna ${saunaMin(s)} min</b><span class="tiny muted">${s.sauna.rounds>1?s.sauna.rounds+' rounds · ':''}+${saunaMin(s)*2} XP</span></div><button class="link" data-act="saunaedit" data-id="${s.id}">Edit</button></div>`;
+  if(saunaMin(s))return`<div class="card sauna-done"><span class="sz-ico">♨</span><div class="grow"><b>Sauna ${saunaLabel(s)}</b><span class="tiny muted">${s.sauna.rounds>1?s.sauna.rounds+' rounds · ':''}+${saunaMin(s)*2} XP</span></div><button class="link" data-act="saunaedit" data-id="${s.id}">Edit</button></div>`;
   const last=S.sessions.filter(x=>saunaMin(x)).sort((a,b)=>b.date.localeCompare(a.date))[0];const def=last?last.sauna.per||15:15;
   return`<div class="card saunacard"><div class="row between"><div><div class="eyebrow">Finish with heat?</div><h2>Sauna</h2></div><span class="sz-big">♨</span></div>
    <div class="szopts">${[10,15,20].map(m=>`<button class="szo ${m===(view.szMin||def)?'on':''}" data-act="saunapick" data-m="${m}">${m}<small>min</small></button>`).join('')}</div>
    <div class="szopts r">${[1,2,3].map(r=>`<button class="szr ${r===(view.szRounds||1)?'on':''}" data-act="saunarounds" data-r="${r}">${r} round${r>1?'s':''}</button>`).join('')}</div>
    <button class="btn big full go heat" data-act="saunago" data-id="${s.id}">Start sauna <span class="xpchip">+${(view.szMin||def)*(view.szRounds||1)*2} XP</span></button>
-   <button class="link full center" data-act="saunalog" data-id="${s.id}">Already did it? Log minutes</button></div>`;
+   <button class="link full center" data-act="saunalog" data-id="${s.id}">Already did it? Log roughly how long</button></div>`;
 }
 
 function saunaState(){const r=S.saunaRun;if(!r)return null;
@@ -1615,9 +1624,11 @@ Object.assign(ACT,{
     if(!await ask(m?`End now and log ${m} min?`:'Cancel the sauna?',m?'Log it':'Cancel'))return;
     if(m)saunaSave(r.sid,m,st.round,r.per);S.saunaRun=null;save();view={tab:'summary',sid:r.sid,prs:[]};render();if(m)toast(`Sauna ${m} min logged`)},
   saunafinish:()=>{const r=S.saunaRun;if(!r)return;saunaSave(r.sid,r.per*r.rounds,r.rounds,r.per);S.saunaRun=null;save();view={tab:'summary',sid:r.sid,prs:[]};render();window.scrollTo(0,0);confetti(80);toast(`♨ Sauna ${r.per*r.rounds} min logged`)},
-  saunalog:(a)=>{const id=a.dataset.id;openSheet(`<div class="eyebrow">Log sauna</div><h2>How long?</h2><div class="szopts">${[10,15,20,30].map(m=>`<button class="szo" data-act="saunaquick" data-id="${id}" data-m="${m}">${m}<small>min</small></button>`).join('')}</div>`)},
-  saunaedit:(a)=>{const id=a.dataset.id;const s=S.sessions.find(x=>x.id===id);openSheet(`<div class="eyebrow">Edit sauna</div><h2>${saunaMin(s)} min</h2><div class="szopts">${[10,15,20,30].map(m=>`<button class="szo ${m===saunaMin(s)?'on':''}" data-act="saunaquick" data-id="${id}" data-m="${m}">${m}<small>min</small></button>`).join('')}</div><button class="btn danger full mt" data-act="saunaquick" data-id="${id}" data-m="0">Remove sauna</button>`)},
-  saunaquick:(a)=>{saunaSave(a.dataset.id,+a.dataset.m,1,+a.dataset.m);closeSheet();render();if(+a.dataset.m)toast(`♨ ${a.dataset.m} min logged`)},
+  saunalog:(a)=>{openSheet(rangeSheet(a.dataset.id,'','Log sauna'))},
+  saunaedit:(a)=>{const id=a.dataset.id;const s=S.sessions.find(x=>x.id===id);openSheet(rangeSheet(id,s.sauna&&s.sauna.range,'Edit sauna')+`<button class="btn danger full mt" data-act="saunaquick" data-id="${id}" data-m="0">Remove sauna</button>`)},
+  saunaquick:(a)=>{saunaSave(a.dataset.id,+a.dataset.m,1,+a.dataset.m);const s=S.sessions.find(x=>x.id===a.dataset.id);if(s&&s.sauna&&a.dataset.l){s.sauna.range=a.dataset.l;save()}closeSheet();render();if(+a.dataset.m)toast(`♨ Sauna ${a.dataset.l||a.dataset.m} min logged`)},
+  saunatoday:()=>{const s=todaySession();if(!s){toast('Log today\'s workout first. The sauna goes on it.');return}closeSheet();if(saunaMin(s))return ACT.saunaedit({dataset:{id:s.id}});
+    openSheet(rangeSheet(s.id,'','Sauna after '+s.name)+`<button class="btn big full go heat mt" data-act="saunago" data-id="${s.id}">Or start the timer</button>`)},
 });
 
 // hook into existing screens
@@ -1630,6 +1641,15 @@ renderSessionView=function(){const s=S.sessions.find(x=>x.id===view.sid);const h
 const _sxp=sessionXP;sessionXP=s=>_sxp(s)+saunaMin(s)*2;
 function saunaResume(){if(!S.saunaRun)return'';const st=saunaState();return`<button class="card hero sauna-resume" data-act="saunaresume"><div class="eyebrow">Sauna running</div><h2>${st.done?'Done, log it':fmtT(Math.ceil(st.left))+(st.phase==='cool'?' cool':' left')}</h2></button>`}
 const _ach=achievements;achievements=function(){const n=saunaCount();return _ach().concat([['♨️','Heat seeker','10 sauna sessions',n>=10]])};
+
+function todaySession(){const td=todayStr();return S.sessions.filter(x=>x.date===td).sort((a,b)=>(b.endedAt||0)-(a.endedAt||0))[0]}
+function saunaToday(){const s=todaySession();if(!s)return'';
+  return saunaMin(s)?`<button class="card sauna-done" data-act="saunaedit" data-id="${s.id}"><span class="sz-ico">♨</span><div class="grow"><b>Sauna ${saunaLabel(s)}</b><span class="tiny muted">after ${esc(s.name)}</span></div><span class="okc">✓</span></button>`
+   :`<button class="card saunabtn" data-act="saunatoday"><span class="sz-ico">♨</span><div class="grow"><b>Add sauna</b><span class="tiny muted">after ${esc(s.name)}</span></div><span class="szplus">＋</span></button>`}
+const _rtd=renderToday;
+renderToday=function(){return _rtd().replace('<button class="card otherbtn"',saunaToday()+'<button class="card otherbtn"')};
+const _others=ACT.others;
+ACT.others=()=>{_others();const g=document.querySelector('#sheet .otherg');if(g)g.insertAdjacentHTML('beforeend','<button class="og sauna" data-act="saunatoday"><b>♨ Sauna</b><span>Add to today\'s workout</span></button>')};
 
 // ================= warm-ups + simpler rest timer =================
 function parseWarm(str){const m=String(str||'').match(/(\d+)\s*[×x]\s*(\d+)\s*@\s*([\d.]+)\s*(s|assist)?/i);return m?{n:+m[1],r:+m[2],w:+m[3],unit:(m[4]||'').toLowerCase()}:null}
