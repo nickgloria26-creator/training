@@ -1766,6 +1766,270 @@ renderToday=function(){return _rtd2().replace('<button class="card otherbtn"',we
 const _rp=renderPlan;
 renderPlan=function(){let h=_rp();S.plan.days.forEach((d,i)=>{if(d.extra&&S.templates[d.extra])h=h.replace(`<b>${DOW[i]}</b></span><select data-bind="defday" data-i="${i}"`,`<b>${DOW[i]}</b><small class="xtra">+${esc(S.templates[d.extra].short)}</small></span><select data-bind="defday" data-i="${i}"`)});return h};
 
+// ================= food: calories + protein, saved meals, sync =================
+// Values per 100 g (or 100 ml) unless the item has u (then per one unit). d = default amount.
+const FOODDB=[
+ // breakfast + dairy
+ ['oats','Oats (fiocchi d\'avena)',372,13.5,80],['milk','Milk, semi-skimmed',46,3.4,250,'ml'],['milkw','Milk, whole',64,3.3,250,'ml'],
+ ['greek0','Greek yogurt 0%',57,10,170],['greek2','Greek yogurt 2%',73,9.5,170],['skyr','Skyr',63,11,150],['protpud','High-protein pudding / yogurt',75,10,200],
+ ['kefir','Kefir',55,3.5,250,'ml'],['whey','Whey protein',380,75,30],['granola','Granola',450,9,50],['cornflakes','Cornflakes',380,7,40],
+ ['honey','Honey',304,0.3,15],['pb','Peanut butter',600,25,20],['jam','Jam',250,0.5,20],['nutella','Nutella',540,6,15],
+ ['banana','Banana',105,1.3,1,'',"banana"],['apple','Apple',80,0.4,1,'',"apple"],['berries','Berries (frozen)',50,0.7,100],['orangej','Orange juice',45,0.7,250,'ml'],
+ ['cornetto','Cornetto / croissant',270,5,1,'','piece'],['ricecake','Rice cakes',380,8,20],
+ // carbs
+ ['pasta','Pasta (dry)',355,12.5,100],['pastaw','Wholewheat pasta (dry)',340,13,100],['rice','Rice / basmati (dry)',350,7.5,90],
+ ['gnocchi','Gnocchi',155,4,200],['potato','Potatoes (raw)',77,2,250],['bread','Bread',270,9,80],['breadw','Wholemeal bread / pancarre',250,9,60],
+ ['wrap','Tortilla wrap',300,8,1,'','wrap'],['couscous','Couscous (dry)',360,12,80],
+ // protein
+ ['chicken','Chicken breast (raw)',110,23,150],['turkey','Turkey breast (raw)',107,24,150],['beef5','Beef mince 5% (raw)',125,21,125],
+ ['beef10','Beef mince 10% (raw)',170,20,125],['beef20','Beef mince 15-20% (raw)',215,18,125],['salmon','Salmon (raw)',200,20,125],
+ ['cod','White fish / cod (raw)',82,18,150],['shrimp','Prawns (raw)',85,19,125],['cotto','Prosciutto cotto',150,19,80],['crudo','Prosciutto crudo',250,26,50],
+ ['bresaola','Bresaola',151,32,60],['tacchino','Sliced turkey (affettato)',100,20,80],['tofu','Tofu',120,13,150],
+ ['chickpeas','Chickpeas (tin, drained)',120,7,120],['lentils','Lentils (tin, drained)',95,7,120],['beans','Beans (tin, drained)',100,7,120],
+ // cheese
+ ['mozz','Mozzarella',250,18.5,125],['mozzl','Mozzarella light',160,20,125],['parm','Parmigiano',392,33,15],['ricotta','Ricotta',146,9,100],
+ ['cottage','Cottage cheese / fiocchi di latte',98,12.5,150],['philly','Cream cheese',250,6,30],
+ // fats, veg, sauces
+ ['oil','Olive oil',884,0,10,'ml'],['butter','Butter',717,0.9,10],['avocado','Avocado',160,2,80],['almonds','Almonds / mixed nuts',600,21,30],
+ ['walnuts','Walnuts',654,15,30],['choc','Dark chocolate',580,8,20],['pesto','Pesto',450,5,40],['passata','Tomato passata',30,1.5,150],
+ ['hummus','Hummus',300,7,50],['veg','Vegetables (mixed)',40,2.5,150],['broccoli','Broccoli',34,2.8,150],['spinach','Spinach',23,2.9,100],
+ ['onion','Onion',40,1.1,80],['sauce','Ready pasta sauce',90,2,100],
+ // eating out (rough estimates, per item)
+ ['pizza','Pizza margherita (whole)',850,35,1,'','pizza'],['pizzaf','Pizza with toppings (whole)',1000,42,1,'','pizza'],
+ ['piadina','Piadina',600,26,1,'','piadina'],['panino','Panino (bar / deli)',520,24,1,'','panino'],['sandwich','Supermarket sandwich',400,18,1,'','pack'],
+ ['kebab','Kebab wrap',750,38,1,'','wrap'],['burger','Burger + fries',1100,40,1,'','meal'],['poke','Poke bowl',650,35,1,'','bowl'],
+ ['sushi','Sushi (12 pieces)',550,22,1,'','box'],['mensa','Canteen meal (primo + secondo)',900,45,1,'','tray'],['protbar','Protein bar',200,20,1,'','bar']
+].map(([id,n,k,p,d,ml,u])=>({id,n,k,p,d,ml:ml==='ml',u:u||''}));
+
+const FOOD_DEF={kcal:3000,p:140};
+function F(){
+  if(!S.food)S.food={};const f=S.food;
+  f.targets=f.targets||{...FOOD_DEF};f.log=f.log||{};f.custom=f.custom||[];
+  if(!f.meals)f.meals=[{id:'porridge',name:'Porridge',portions:1,items:[{i:'oats',a:80},{i:'milk',a:300},{i:'banana',a:1},{i:'honey',a:15}],starter:true}];
+  return f;
+}
+const fIng=id=>FOODDB.find(x=>x.id===id)||F().custom.find(x=>x.id===id);
+function ingMac(it){const g=fIng(it.i);if(!g)return{k:0,p:0};const m=g.u?it.a:it.a/100;return{k:g.k*m,p:g.p*m}}
+function mealMac(m){
+  if(m.items&&m.items.length){const t=m.items.map(ingMac);const n=Math.max(1,+m.portions||1);return{k:sum(t.map(x=>x.k))/n,p:sum(t.map(x=>x.p))/n}}
+  return{k:+m.k||0,p:+m.p||0};
+}
+const amtLbl=(g,a)=>g.u?`${fw(a)} ${g.u}${a!=1&&!/s$/.test(g.u)?'s':''}`:`${fw(a)} ${g.ml?'ml':'g'}`;
+const fDay=d=>F().log[d]||[];
+function dayTot(d){const l=fDay(d);return{k:Math.round(sum(l.map(e=>e.k))),p:Math.round(sum(l.map(e=>e.p))),n:l.length}}
+const nowHM=()=>new Date().toTimeString().slice(0,5);
+function addEntry(e,d){const f=F();d=d||view.fd||todayStr();e.id=uid();e.t=e.t||nowHM();e.k=Math.round(e.uk*(e.q||1));e.p=Math.round(e.up*(e.q||1)*10)/10;(f.log[d]=f.log[d]||[]).push(e);save();return e}
+function recentFoods(){ // things logged lately that aren't saved meals, newest first, unique by name
+  const f=F();const out=[],seen=new Set();
+  for(const d of Object.keys(f.log).sort().reverse().slice(0,21))for(const e of f.log[d].slice().reverse()){if(e.m||seen.has(e.n))continue;seen.add(e.n);out.push(e)}
+  return out.slice(0,8);
+}
+function foodXP(){const f=S.food;if(!f||!f.log)return 0;const T=f.targets||FOOD_DEF;let x=0;
+  for(const d in f.log){const t=dayTot(d);if(t.n>=2)x+=5;if(t.p>=T.p)x+=10;if(t.k>=T.kcal*.95)x+=10}return x}
+
+// ---- bars ----
+function fbar(v,goal,cls,unit,label){const pct=goal?Math.min(100,v/goal*100):0;const left=Math.round(goal-v);
+  return`<div class="fb ${cls}"><div class="row between"><span class="fbl">${label}</span><span class="fbv"><b>${unit==='g'?Math.round(v):v.toLocaleString('en-GB')}</b> / ${unit==='g'?goal+' g':goal.toLocaleString('en-GB')}</span></div>
+   <div class="fbt"><i style="width:${pct}%"></i></div><div class="tiny muted fbr">${left>0?`${unit==='g'?left+' g':left.toLocaleString('en-GB')+' kcal'} to go`:`<span class="good-t">✓ hit${left<0?` (+${unit==='g'?-left+' g':(-left).toLocaleString('en-GB')})`:''}</span>`}</div></div>`}
+function mealBtns(){return F().meals.map(m=>{const x=mealMac(m);return`<button class="fmeal" data-act="flogmeal" data-id="${m.id}"><b>${esc(m.name)}</b><span>${Math.round(x.k)} kcal · ${Math.round(x.p)} g</span></button>`}).join('')}
+
+// ---- Today card ----
+function foodCard(){
+  const f=F();const td=todayStr();const t=dayTot(td);const T=f.targets;
+  return`<div class="card foodc"><div class="row between"><div class="eyebrow">Food today</div><button class="link" data-act="tab" data-t="food">Open ›</button></div>
+   ${fbar(t.k,T.kcal,'kc','kcal','Calories')}${fbar(t.p,T.p,'pr','g','Protein')}
+   <div class="fmeals sm">${mealBtns()}<button class="fmeal add" data-act="fadd"><b>＋ Add</b><span>food or quick kcal</span></button></div></div>`;
+}
+
+// ---- Food tab ----
+function renderFood(){
+  const f=F();const td=todayStr();const d=view.fd||td;const t=dayTot(d);const T=f.targets;const isT=d===td;
+  const yd=ymd(addDays(parseYmd(d),-1));const l=fDay(d);
+  const list=l.length?l.map((e,i)=>`<button class="listrow fent" data-act="fedit" data-i="${i}"><span class="ft">${esc(e.t||'')}</span><span class="grow"><b>${esc(e.n)}</b><small class="muted">${e.q&&e.q!=1?'× '+fw(e.q)+' · ':''}${e.g?esc(e.g)+' · ':''}${Math.round(e.p)} g protein</small></span><b>${e.k}</b></button>`).join('')
+    :`<div class="empty">Nothing logged ${isT?'yet today':'this day'}.${fDay(yd).length?`<br><button class="btn ghost sm mt" data-act="fcopy" data-from="${yd}">Repeat ${isT?'yesterday':fmtShort(yd)} (${dayTot(yd).k} kcal)</button>`:''}</div>`;
+  return`<header class="top"><button class="iconbtn" data-act="fday" data-v="-1">‹</button><div class="grow center"><div class="eyebrow">${isT?'Today':fmtDate(d)}</div><h1>Food</h1></div><button class="iconbtn" data-act="fday" data-v="1" ${isT?'disabled':''}>›</button></header>
+  <div class="card hero foodhero">${fbar(t.k,T.kcal,'kc big','kcal','Calories')}${fbar(t.p,T.p,'pr big','g','Protein')}
+   <button class="btn primary big full go" data-act="fadd">＋ Add food</button></div>
+  <div class="card"><div class="row between"><div class="eyebrow">One-tap meals</div><button class="link" data-act="fmeals">Edit</button></div><div class="fmeals">${mealBtns()}<button class="fmeal add" data-act="fmealnew"><b>＋ New meal</b><span>save a meal prep</span></button></div></div>
+  <div class="card"><div class="eyebrow">${isT?'Logged today':'Logged'} · ${t.n} item${t.n===1?'':'s'}</div>${list}</div>
+  ${foodWeek(d)}${foodTargets()}`;
+}
+function foodWeek(ref){
+  const f=F();const T=f.targets;const ds=weekDates(ref);const td=todayStr();
+  const mx=Math.max(T.kcal*1.25,...ds.map(d=>dayTot(d).k));
+  const cols=ds.map(d=>{const t=dayTot(d);const h=t.k/mx*100;const ok=t.k>=T.kcal*.95,pk=t.p>=T.p;
+    return`<button class="fwc ${d===(view.fd||td)?'sel':''} ${d>td?'fut':''}" data-act="fgo" data-d="${d}"><span class="fwk">${t.n?fmtK(t.k):''}</span><span class="fwbar"><i class="${ok?'ok':''}" style="height:${h}%"></i><em style="bottom:${T.kcal/mx*100}%"></em></span><span class="fwp ${pk?'ok':''}">${t.n?Math.round(t.p)+'g':'·'}</span><span class="fwd">${DOW[dowIdx(d)].slice(0,2)}</span></button>`}).join('');
+  const logged=ds.filter(d=>d<=td&&dayTot(d).n>=2);const avgK=logged.length?Math.round(sum(logged.map(d=>dayTot(d).k))/logged.length):null;const avgP=logged.length?Math.round(sum(logged.map(d=>dayTot(d).p))/logged.length):null;
+  const pHit=ds.filter(d=>dayTot(d).p>=T.p).length;
+  return`<div class="card"><div class="eyebrow">Week of ${fmtShort(ds[0])} · line = target</div><div class="fweek">${cols}</div>
+   <div class="tally mt"><div><b>${avgK!=null?fmtK(avgK):'–'}</b><span>avg kcal</span></div><div><b>${avgP??'–'}</b><span>avg protein g</span></div><div class="${pHit>=5?'ok':''}"><b>${pHit}/7</b><span>protein days</span></div><div><b>${logged.length}</b><span>days logged</span></div></div>${scaleCheck(avgK)}</div>`;
+}
+function scaleCheck(avgK){
+  if(typeof bwAvg!=='function')return'';const bw=S.bodyweight.slice().sort((a,b)=>a.date.localeCompare(b.date));const td=todayStr();
+  const a=bwAvg(bw,td),b=bwAvg(bw,ymd(addDays(parseYmd(td),-14)));
+  if(a==null||b==null)return`<p class="tiny muted">Weigh in most mornings. After two weeks this tells you if ${F().targets.kcal.toLocaleString('en-GB')} kcal is actually making you grow.</p>`;
+  const wk=(a-b)/2;const s=(wk>0?'+':'')+wk.toFixed(2)+' kg/week';
+  const v=wk<0.05?`<b class="bad-t">Not gaining (${s}).</b> If you really hit the target most days, it's too low: add ~200 kcal. If you didn't, eat the target first.`
+    :wk>0.35?`<b class="warn-t">Gaining fast (${s}).</b> Some of that is fat. Hold steady a week; if it stays this fast, trim ~150 kcal.`
+    :`<b class="good-t">On track (${s}).</b> That's lean-gain pace. Keep the target.`;
+  return`<p class="tiny fscale">${v}</p>`;
+}
+function foodTargets(){const T=F().targets;
+  return`<div class="card"><div class="eyebrow">Daily targets</div><div class="row gap"><label class="mini-in"><span>kcal</span><input inputmode="numeric" data-bind="f-tk" value="${T.kcal}"></label><label class="mini-in"><span>protein g</span><input inputmode="numeric" data-bind="f-tp" value="${T.p}"></label></div>
+   <p class="tiny muted mt">Lean gain: a small surplus, aiming for about +0.5 to 1 kg a month on the weekly weight average. Your coach adjusts these from your scale trend each Sunday.</p></div>`}
+
+// ---- add sheet ----
+function addSheet(q=''){
+  const f=F();const rec=recentFoods();
+  return`<div class="eyebrow">Add to ${(view.fd||todayStr())===todayStr()?'today':fmtShort(view.fd)}</div>
+   <div class="fmeals">${mealBtns()}</div>
+   ${rec.length?`<div class="eyebrow mt">Recent</div><div class="chips">${rec.map(e=>`<button class="chip" data-act="frecent" data-n="${esc(e.n)}">${esc(e.n)} <small class="muted">${e.k}</small></button>`).join('')}</div>`:''}
+   <div class="eyebrow mt">Quick add</div>
+   <div class="row gap fq"><label class="mini-in"><span>kcal</span><input id="fq-k" inputmode="numeric"></label><label class="mini-in"><span>protein g</span><input id="fq-p" inputmode="decimal"></label><input id="fq-n" class="grow" placeholder="what (optional)"><button class="btn primary" data-act="fquick">Add</button></div>
+   <div class="eyebrow mt">Search a food</div>
+   <input class="search" id="fsearch" data-bind="f-search" placeholder="chicken, pasta, pizza…" value="${esc(q)}" autocomplete="off">
+   <div id="fres">${searchRes(q)}</div>`;
+}
+function searchRes(q){q=(q||'').toLowerCase().trim();const all=[...F().custom,...FOODDB];
+  const r=q?all.filter(g=>g.n.toLowerCase().includes(q)).slice(0,14):all.slice(0,0);
+  return r.map(g=>`<button class="listrow" data-act="fpick" data-id="${g.id}"><span class="grow"><b>${esc(g.n)}</b><small class="muted">${g.u?'per '+g.u:'per 100 '+(g.ml?'ml':'g')}: ${g.k} kcal · ${g.p} g protein</small></span><span>›</span></button>`).join('')
+   +(q?`<button class="listrow" data-act="fcustom"><span class="grow"><b>＋ Add “${esc(q)}” from the label</b><small class="muted">type kcal + protein per 100 g once, it's saved</small></span></button>`:`<p class="tiny muted">Or type anything. Eating out? Try pizza, piadina, kebab, mensa.</p>`);
+}
+function amountSheet(id,mode,mi){const g=fIng(id);const a=g.d;
+  return`<div class="eyebrow">${mode==='meal'?'Add to meal':'Log'}</div><h2>${esc(g.n)}</h2>
+   <div class="bwin"><button data-act="famt" data-v="-1">−</button><input id="famt" inputmode="decimal" value="${a}" data-bind="f-amt" data-id="${id}"><button data-act="famt" data-v="1">+</button></div>
+   <p class="center tiny muted">${g.u?g.u+'s':g.ml?'ml':'grams'}${g.u?'':' (weigh it raw/dry if it says raw/dry)'}</p>
+   <p class="center fprev" id="fprev">${prevTxt(g,a)}</p>
+   <button class="btn primary big full" data-act="${mode==='meal'?'fmealadd':'flogamt'}" data-id="${id}" data-mi="${mi??''}">${mode==='meal'?'Add to meal':'Log it'}</button>`}
+const prevTxt=(g,a)=>{const m=g.u?a:a/100;return`<b>${Math.round(g.k*m)}</b> kcal · <b>${Math.round(g.p*m*10)/10}</b> g protein`};
+function customSheet(name,back){return`<div class="eyebrow">New food (from the label)</div><label class="field"><span>Name</span><input id="fc-n" value="${esc(name||'')}"></label>
+   <div class="row gap"><label class="mini-in"><span>kcal /100g</span><input id="fc-k" inputmode="numeric"></label><label class="mini-in"><span>protein /100g</span><input id="fc-p" inputmode="decimal"></label><label class="mini-in"><span>usual g</span><input id="fc-d" inputmode="numeric" value="100"></label></div>
+   <button class="btn primary big full" data-act="fcustomsave" data-back="${back||''}">Save food</button>`}
+
+// ---- meal editor ----
+function mealEditor(id){const f=F();const m=f.meals.find(x=>x.id===id);if(!m)return'';const x=mealMac(m);const manual=!m.items||!m.items.length;
+  return`<div class="eyebrow">Saved meal</div><label class="field"><span>Name</span><input data-bind="f-mname" data-id="${m.id}" value="${esc(m.name)}"></label>
+   ${m.starter?`<p class="tiny warn-t">Starter guess. Change it to what you actually put in your porridge.</p>`:''}
+   <div class="eyebrow mt">Ingredients for the whole batch</div>
+   ${(m.items||[]).map((it,i)=>{const g=fIng(it.i);if(!g)return'';const mm=ingMac(it);return`<div class="tplrow"><div class="grow"><b>${esc(g.n)}</b><div class="tiny muted">${Math.round(mm.k)} kcal · ${Math.round(mm.p)} g</div></div><label class="mini-in"><span>${g.u?g.u+'s':g.ml?'ml':'g'}</span><input inputmode="decimal" data-bind="f-mamt" data-id="${m.id}" data-i="${i}" value="${it.a}"></label><button class="iconbtn sm danger" data-act="fmealrm" data-id="${m.id}" data-i="${i}">✕</button></div>`}).join('')}
+   <input class="search mt" data-bind="f-msearch" data-id="${m.id}" placeholder="＋ add ingredient (search)" autocomplete="off"><div id="fmres"></div>
+   <div class="row gap mt"><label class="mini-in"><span>portions</span><input inputmode="numeric" data-bind="f-mport" data-id="${m.id}" value="${m.portions||1}"></label>
+    ${manual?`<label class="mini-in"><span>kcal each</span><input inputmode="numeric" data-bind="f-mk" data-id="${m.id}" value="${m.k||''}"></label><label class="mini-in"><span>protein each</span><input inputmode="decimal" data-bind="f-mp" data-id="${m.id}" value="${m.p||''}"></label>`:''}</div>
+   <p class="tiny muted">${manual?'No ingredients? Just type kcal + protein per portion. ':''}Batch cooking: put in everything for the whole batch and how many boxes it makes.</p>
+   <div class="card2 fmt center"><b id="fmtot">${Math.round(x.k)} kcal · ${Math.round(x.p)} g protein</b><div class="tiny muted">per portion</div></div>
+   <div class="row gap mt"><button class="btn danger" data-act="fmealdel" data-id="${m.id}">Delete</button><button class="btn primary grow" data-act="fmealdone">Done</button></div>`}
+function mealsSheet(){return`<div class="eyebrow">Saved meals</div>${F().meals.map(m=>{const x=mealMac(m);return`<button class="listrow" data-act="fmealedit" data-id="${m.id}"><span class="grow"><b>${esc(m.name)}</b><small class="muted">${Math.round(x.k)} kcal · ${Math.round(x.p)} g per portion${m.items&&m.items.length?' · '+m.items.length+' ingredients':''}</small></span><span>✎</span></button>`}).join('')}<button class="btn primary full mt" data-act="fmealnew">＋ New meal</button>`}
+function entrySheet(i){const d=view.fd||todayStr();const e=fDay(d)[i];if(!e)return'';
+  return`<div class="eyebrow">${esc(e.t||'')} · ${fmtShort(d)}</div><h2>${esc(e.n)}</h2>
+   <div class="szopts">${[0.5,1,1.5,2].map(q=>`<button class="szo ${(e.q||1)==q?'on':''}" data-act="fq" data-i="${i}" data-q="${q}">×${q}<small>${Math.round(e.uk*q)}</small></button>`).join('')}</div>
+   <p class="center"><b>${e.k}</b> kcal · <b>${Math.round(e.p)}</b> g protein</p>
+   <div class="row gap mt"><button class="btn danger grow" data-act="fdel" data-i="${i}">Delete</button><button class="btn ghost grow" data-act="fsavemeal" data-i="${i}">Save as meal</button><button class="btn primary grow" data-act="closesheet">Done</button></div>`}
+
+const fRefresh=()=>{view.keepScroll=true;render()};
+Object.assign(ACT,{
+  fadd:()=>openSheet(addSheet()),
+  fday:(a)=>{const td=todayStr();let d=ymd(addDays(parseYmd(view.fd||td),+a.dataset.v));if(d>td)d=td;view.fd=d===td?null:d;fRefresh()},
+  fgo:(a)=>{const td=todayStr();const d=a.dataset.d;if(d>td)return;view.fd=d===td?null:d;if(view.tab!=='food'){view={tab:'food',fd:view.fd}}fRefresh()},
+  flogmeal:(a)=>{const m=F().meals.find(x=>x.id===a.dataset.id);if(!m)return;const x=mealMac(m);addEntry({n:m.name,m:m.id,uk:Math.round(x.k),up:Math.round(x.p*10)/10,q:1});closeSheet();fRefresh();foodToast(m.name)},
+  frecent:(a)=>{const e=recentFoods().find(x=>x.n===a.dataset.n);if(!e)return;addEntry({n:e.n,uk:e.uk,up:e.up,q:e.q||1,g:e.g});closeSheet();fRefresh();foodToast(e.n)},
+  fquick:()=>{const k=parseFloat($('#fq-k').value),p=parseFloat(String($('#fq-p').value).replace(',','.'))||0;if(!(k>0||p>0)){toast('Type the kcal (and protein if you know it)');return}
+    addEntry({n:$('#fq-n').value.trim()||'Quick add',uk:Math.round(k||0),up:p,q:1});closeSheet();fRefresh();foodToast('Added')},
+  fpick:(a)=>openSheet(amountSheet(a.dataset.id,view.fMeal?'meal':'log',view.fMeal)),
+  famt:(a)=>{const el=$('#famt');const g=fIng(el.dataset.id);const st=g.u?0.5:g.d>=100?25:5;el.value=Math.max(0,(parseFloat(el.value)||0)+st*a.dataset.v);$('#fprev').innerHTML=prevTxt(g,+el.value)},
+  flogamt:(a)=>{const g=fIng(a.dataset.id);const v=parseFloat(String($('#famt').value).replace(',','.'));if(!(v>0))return;const m=g.u?v:v/100;
+    addEntry({n:g.n,g:amtLbl(g,v),uk:Math.round(g.k*m),up:Math.round(g.p*m*10)/10,q:1});closeSheet();fRefresh();foodToast(g.n)},
+  fcustom:()=>openSheet(customSheet($('#fsearch')?$('#fsearch').value:'',view.fMeal?'meal':'log')),
+  fcustomsave:(a)=>{const n=$('#fc-n').value.trim(),k=parseFloat($('#fc-k').value),p=parseFloat(String($('#fc-p').value).replace(',','.'))||0,d=parseFloat($('#fc-d').value)||100;
+    if(!n||!(k>=0)){toast('Name and kcal per 100 g, please');return}const g={id:'c'+uid(),n,k,p,d,ml:false,u:''};F().custom.unshift(g);save();openSheet(amountSheet(g.id,a.dataset.back==='meal'?'meal':'log',view.fMeal))},
+  fedit:(a)=>openSheet(entrySheet(+a.dataset.i)),
+  fq:(a)=>{const e=fDay(view.fd||todayStr())[+a.dataset.i];const q=+a.dataset.q;e.q=q;e.k=Math.round(e.uk*q);e.p=Math.round(e.up*q*10)/10;save();openSheet(entrySheet(+a.dataset.i));fRefresh()},
+  fdel:(a)=>{const d=view.fd||todayStr();F().log[d].splice(+a.dataset.i,1);if(!F().log[d].length)delete F().log[d];save();closeSheet();fRefresh()},
+  fsavemeal:(a)=>{const e=fDay(view.fd||todayStr())[+a.dataset.i];const m={id:'m'+uid(),name:e.n,portions:1,items:[],k:e.uk,p:e.up};F().meals.push(m);save();closeSheet();fRefresh();toast('Saved as a one-tap meal')},
+  fcopy:(a)=>{const from=fDay(a.dataset.from);for(const e of from){const{id,t,...r}=e;addEntry({...r,t})}fRefresh();toast(`Copied ${from.length} items`)},
+  fmeals:()=>openSheet(mealsSheet()),
+  fmealnew:()=>{const m={id:'m'+uid(),name:'New meal',portions:1,items:[]};F().meals.push(m);save();view.fMeal=m.id;openSheet(mealEditor(m.id))},
+  fmealedit:(a)=>{view.fMeal=a.dataset.id;openSheet(mealEditor(a.dataset.id))},
+  fmealadd:(a)=>{const m=F().meals.find(x=>x.id===a.dataset.mi);const v=parseFloat(String($('#famt').value).replace(',','.'));if(m&&v>0){m.items=m.items||[];m.items.push({i:a.dataset.id,a:v});delete m.starter;save()}openSheet(mealEditor(a.dataset.mi))},
+  fmealrm:(a)=>{const m=F().meals.find(x=>x.id===a.dataset.id);m.items.splice(+a.dataset.i,1);save();openSheet(mealEditor(m.id))},
+  fmealdel:async(a)=>{const id=a.dataset.id;const m=F().meals.find(x=>x.id===id);if(!await ask(`Delete “${m.name}”? Past logs stay.`,'Delete','danger'))return;F().meals=F().meals.filter(x=>x.id!==id);view.fMeal=null;save();closeSheet();fRefresh()},
+  fmealdone:()=>{view.fMeal=null;closeSheet();fRefresh()},
+});
+function foodToast(){const t=dayTot(todayStr()),T=F().targets;toast(`✓ ${Math.max(0,T.kcal-t.k).toLocaleString('en-GB')} kcal, ${Math.max(0,Math.round(T.p-t.p))} g protein left`)}
+// sheet closes by tapping outside: forget meal-edit mode then too
+const _closeSheetF=closeSheet;closeSheet=function(){if(view.fMeal&&$('#sheet').classList.contains('on')){view.fMeal=null;if(view.tab==='food'||view.tab==='today')setTimeout(fRefresh,0)}return _closeSheetF()};
+
+document.addEventListener('input',e=>{const t=e.target;const b=t.dataset.bind;if(!b||b.slice(0,2)!=='f-')return;
+  if(b==='f-search'){$('#fres').innerHTML=searchRes(t.value);return}
+  if(b==='f-msearch'){const q=t.value.toLowerCase().trim();const r=q?[...F().custom,...FOODDB].filter(g=>g.n.toLowerCase().includes(q)).slice(0,10):[];
+    $('#fmres').innerHTML=r.map(g=>`<button class="listrow" data-act="fpick" data-id="${g.id}"><span class="grow"><b>${esc(g.n)}</b><small class="muted">${g.k} kcal · ${g.p} g ${g.u?'per '+g.u:'/100'+(g.ml?'ml':'g')}</small></span><span>＋</span></button>`).join('')+(q?`<button class="listrow" data-act="fcustom"><span class="grow"><b>＋ “${esc(t.value)}” from the label</b></span></button>`:'');
+    if($('#fsearch'))$('#fsearch').value=t.value;return}
+  if(b==='f-amt'){const g=fIng(t.dataset.id);$('#fprev').innerHTML=prevTxt(g,parseFloat(String(t.value).replace(',','.'))||0);return}
+});
+document.addEventListener('change',e=>{const t=e.target;const b=t.dataset.bind;if(!b||b.slice(0,2)!=='f-'||b==='f-search'||b==='f-msearch'||b==='f-amt')return;
+  const n=v=>{const x=parseFloat(String(v).replace(',','.'));return isNaN(x)?0:x};const f=F();const m=f.meals.find(x=>x.id===t.dataset.id);
+  switch(b){
+    case'f-tk':if(n(t.value)>=1200&&n(t.value)<=6000)f.targets.kcal=Math.round(n(t.value));break;
+    case'f-tp':if(n(t.value)>=40&&n(t.value)<=300)f.targets.p=Math.round(n(t.value));break;
+    case'f-mname':m.name=t.value.trim()||m.name;break;
+    case'f-mamt':m.items[+t.dataset.i].a=n(t.value);delete m.starter;break;
+    case'f-mport':m.portions=Math.max(1,Math.round(n(t.value))||1);break;
+    case'f-mk':m.k=n(t.value);break;
+    case'f-mp':m.p=n(t.value);break;
+  }
+  save();
+  if(m&&$('#fmtot')){const x=mealMac(m);$('#fmtot').textContent=`${Math.round(x.k)} kcal · ${Math.round(x.p)} g protein`}
+  else if(view.tab==='food'&&!$('#sheet').classList.contains('on'))fRefresh();
+},true);
+// app.js's change handler would also see f-* binds; it just calls save(), which is harmless.
+
+// ---- wire into the app ----
+icon.food='<svg viewBox="0 0 24 24"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v3H17"/></svg>';
+const _renderF=render;
+render=function(){
+  if(view.tab==='food'){const ks=view.keepScroll,y=window.scrollY;view.tab='body';view.keepScroll=false;_renderF();view.tab='food';$('#app').innerHTML=renderFood();if(ks)window.scrollTo(0,y)}
+  else _renderF();
+  const nav=$('#nav');if(nav&&!nav.querySelector('[data-t="food"]')){const b=nav.querySelector('[data-t="body"]');if(b){b.insertAdjacentHTML('beforebegin',`<button data-act="tab" data-t="food" class="${view.tab==='food'?'on':''}">${icon.food}<span>Food</span></button>`);if(view.tab==='food')b.classList.remove('on')}}
+};
+const _rtdF=renderToday;
+renderToday=function(){const h=_rtdF();const c=foodCard();
+  if(h.includes('<div class="card weekc">'))return h.replace('<div class="card weekc">',c+'<div class="card weekc">');
+  return h.replace('<button class="card otherbtn"',c+'<button class="card otherbtn"')};
+if(typeof xpTotal==='function'){const _xpF=xpTotal;xpTotal=function(){return _xpF()+foodXP()}}
+// coach.json can set {"food":{"kcal":3100,"p":140}}; applied once per coach version
+if(typeof pullCoach==='function'){const _pcF=pullCoach;pullCoach=async function(q){await _pcF(q);const c=S.coach;if(c&&c.food&&c.version&&F().coachApplied!==c.version){if(c.food.kcal)F().targets.kcal=+c.food.kcal;if(c.food.p)F().targets.p=+c.food.p;F().coachApplied=c.version;saveLocal();if(view.tab==='food'||view.tab==='today')render()}}}
+// summary.md gets a food section for the weekly review
+if(typeof weekSummaryMd==='function'){const _wsF=weekSummaryMd;weekSummaryMd=function(){
+  const T=F().targets;const td=todayStr();const ds=[...Array(14)].map((_,i)=>ymd(addDays(parseYmd(td),-13+i)));
+  const rows=ds.map(d=>{const t=dayTot(d);return`| ${d} ${DOW[dowIdx(d)]} | ${t.n?t.k:'-'} | ${t.n?t.p:'-'} | ${t.n} |`}).join('\n');
+  const wk=w=>{const l=weekDates(w).filter(d=>d<=td&&dayTot(d).n>=2);return l.length?`${l.length} days logged, avg ${Math.round(sum(l.map(d=>dayTot(d).k))/l.length)} kcal / ${Math.round(sum(l.map(d=>dayTot(d).p))/l.length)} g protein`:'nothing logged'};
+  const meals=F().meals.map(m=>{const x=mealMac(m);return`${m.name} ${Math.round(x.k)}/${Math.round(x.p)}g`}).join('; ');
+  return _wsF()+`\n## Food (targets ${T.kcal} kcal, ${T.p} g protein)\n- This week: ${wk(td)}\n- Last week: ${wk(ymd(addDays(parseYmd(td),-7)))}\n\n| Day | kcal | protein g | items |\n|---|---|---|---|\n${rows}\n\nSaved meals: ${meals||'none'}\n`}}
+
+(function(){const st=document.createElement('style');st.textContent=`
+.fb{margin:10px 0 2px}.fb .fbl{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.fb .fbv{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px}.fb .fbv b{color:var(--text);font-size:17px;font-family:var(--disp,inherit);font-weight:800}
+.fb.big .fbv b{font-size:30px}
+.fbt{height:10px;border-radius:6px;background:var(--card2);overflow:hidden;margin-top:5px}.fb.big .fbt{height:14px}
+.fbt i{display:block;height:100%;border-radius:6px;background:var(--accent);transition:width .4s}.fb.pr .fbt i{background:var(--swim)}
+.fbr{margin-top:3px}.good-t{color:var(--good)}.warn-t{color:var(--warn)}.bad-t{color:var(--bad)}
+.fmeals{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
+.fmeal{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:11px 12px;border-radius:14px;background:var(--card2);min-height:58px}
+.fmeal b{font-size:15px;line-height:1.2}.fmeal span{font-size:12px;color:var(--muted)}.fmeal.add{border:1px dashed var(--line);background:transparent}.fmeal.add b{color:var(--accent)}
+.fmeal:active{transform:scale(.97)}.fmeals.sm .fmeal{min-height:50px;padding:9px 11px}
+.fent .ft{font-size:12px;color:var(--muted);width:40px;flex:none;font-variant-numeric:tabular-nums}.fent small{font-size:12px}
+.fweek{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px}
+.fwc{display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;border-radius:10px}.fwc.sel{background:var(--card2)}.fwc.fut{opacity:.4}
+.fwbar{position:relative;width:60%;height:90px;border-radius:6px;background:var(--card2);overflow:hidden}.fwc.sel .fwbar{background:var(--bg)}
+.fwbar i{position:absolute;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--accent) 55%,transparent);border-radius:6px 6px 0 0}.fwbar i.ok{background:var(--accent)}
+.fwbar em{position:absolute;left:-2px;right:-2px;height:2px;background:var(--text);opacity:.6}
+.fwk{font-size:10.5px;color:var(--muted);height:14px;font-variant-numeric:tabular-nums}.fwp{font-size:11px;font-weight:700;color:var(--muted)}.fwp.ok{color:var(--swim)}.fwd{font-size:11px;font-weight:700;color:var(--muted)}
+.fscale{margin:10px 0 0;line-height:1.45}
+.fq{flex-wrap:wrap}.fq .grow{min-width:120px}
+.fprev{font-size:16px;margin:6px 0 0}.card2{background:var(--card2);border-radius:14px;padding:10px}.fmt{margin-top:10px}
+.foodc .fb{margin:6px 0 0}
+#nav button span{white-space:nowrap}
+`;document.head.appendChild(st)})();
+
 // ---------- boot ----------
 load();
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
